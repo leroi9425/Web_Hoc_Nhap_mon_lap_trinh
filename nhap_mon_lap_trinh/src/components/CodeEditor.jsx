@@ -1,124 +1,159 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
+import { Play, CheckCircle, Code, Brain, ChevronRight } from 'lucide-react';
 import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 
 const BACKEND = 'http://localhost:8080';
 
-const CodeEditor = () => {
+// Badge trạng thái testcase
+const StatusBadge = ({ status }) => {
+    const map = {
+        PASSED:  'text-green-500 bg-green-500/10 border-green-500/20',
+        FAILED:  'text-red-500 bg-red-500/10 border-red-500/20',
+        TLE:     'text-yellow-500 bg-yellow-500/10 border-yellow-500/20',
+        OLE:     'text-orange-500 bg-orange-500/10 border-orange-500/20',
+        ERROR:   'text-red-500 bg-red-500/10 border-red-500/20',
+        ACCEPTED: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
+        WRONG_ANSWER: 'text-red-500 bg-red-500/10 border-red-500/20',
+        PARTIAL: 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20',
+        COMPILE_ERROR: 'text-red-500 bg-red-500/10 border-red-500/20',
+    };
+    const icon = { 
+        PASSED: '✓', FAILED: '✗', TLE: '⏱', OLE: '📤', ERROR: '!',
+        ACCEPTED: '★', WRONG_ANSWER: '✗', PARTIAL: '⚠', COMPILE_ERROR: '!'
+    };
+    const cls = map[status] ?? map.ERROR;
+    return (
+        <span className={`text-[11px] px-2 py-0.5 rounded-full border font-mono font-bold uppercase ${cls}`}>
+            {icon[status] ?? '!'} {status}
+        </span>
+    );
+};
+
+export default function CodeEditor() {
+    const { problemId } = useParams();
+    const navigate = useNavigate();
+
+    // Bài tập
+    const [problem, setProblem] = useState(null);
+    const [probLoading, setProbLoading] = useState(true);
+
+    // Editor
     const [code, setCode] = useState('// Viết code của bạn ở đây...');
     const [language, setLanguage] = useState('cpp');
-    const [result, setResult] = useState('');
-    const [loading, setLoading] = useState(false);
 
-    // AI chat state
-    const [showAiPanel, setShowAiPanel] = useState(false);
+    // Chạy thử / Submit
+    const [stdin, setStdin] = useState('');
+    const [runResult, setRunResult] = useState('');
+    const [judgeResult, setJudgeResult] = useState(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+    
+    // UI State
+    const [activeLeftTab, setActiveLeftTab] = useState('description'); // description, testcases, ai
+    const [activeConsoleTab, setActiveConsoleTab] = useState('output'); // output
+    
+    // AI Analysis
     const [chatHistory, setChatHistory] = useState([]);
-    // chatHistory: [{role: 'user'|'model', content: string}]
-    const [inputText, setInputText] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
     const chatBottomRef = useRef(null);
 
-    // Tự scroll xuống cuối khi có tin nhắn mới
+    useEffect(() => {
+        if (!problemId) return;
+        
+        // Lấy chi tiết bài tập
+        axios.get(`${BACKEND}/api/problems/${problemId}`)
+            .then(res => setProblem(res.data))
+            .catch(() => setProblem(null))
+            .finally(() => setProbLoading(false));
+            
+        // Lấy code đã lưu gần nhất
+        axios.get(`${BACKEND}/api/submissions/latest/${problemId}`)
+            .then(res => {
+                if (res.data.code) {
+                    setCode(res.data.code);
+                    if (res.data.language) setLanguage(res.data.language);
+                }
+            })
+            .catch(err => console.error("Could not fetch latest submission:", err));
+            
+    }, [problemId]);
+
     useEffect(() => {
         chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [chatHistory, aiLoading]);
 
-    // Chạy code
-    const handleRunCode = async () => {
-        setLoading(true);
+    const handleRun = async () => {
+        setIsProcessing(true);
+        setActiveConsoleTab('output');
+        setJudgeResult(null);
         try {
-            const response = await axios.post(`${BACKEND}/api/judge/run`, {
-                code, language
-            });
-            setResult(response.data);
-        } catch (error) {
-            setResult("Lỗi kết nối Backend: " + error.message);
+            const res = await axios.post(`${BACKEND}/api/judge/run`, { code, language, stdin });
+            setRunResult(res.data);
+        } catch (e) {
+            setRunResult('Lỗi kết nối backend: ' + e.message);
         }
-        setLoading(false);
+        setIsProcessing(false);
     };
 
-    // Gọi AI lần đầu — bấm nút "Hỏi AI"
-    const handleAskAI = async () => {
-        setShowAiPanel(true);
-        setChatHistory([]); // reset hội thoại cũ nếu có
-        const firstMessage = "Em cần gợi ý để hiểu và sửa code này.";
-        await sendMessage(firstMessage, []);
+    const handleSubmit = async () => {
+        setIsProcessing(true);
+        setActiveConsoleTab('output');
+        setRunResult('');
+        try {
+            const res = await axios.post(`${BACKEND}/api/judge/submit`, { problemId: Number(problemId), code, language });
+            setJudgeResult(res.data);
+        } catch (e) {
+            setJudgeResult({ finalStatus: 'ERROR', compileError: e.message, results: [] });
+        }
+        setIsProcessing(false);
     };
 
-    // Gửi tin nhắn follow-up từ ô input
-    const handleSendFollowUp = async () => {
-        if (!inputText.trim() || aiLoading) return;
-        const userMsg = inputText.trim();
-        setInputText('');
-        await sendMessage(userMsg, chatHistory);
-    };
+    const handleAskAi = async () => {
+        if (!code || code.trim() === '' || code.includes('// Viết code của bạn ở đây')) {
+            setChatHistory([{ role: 'model', content: 'Vui lòng viết code thực tế trước khi nhờ AI phân tích nhé!' }]);
+            return;
+        }
 
-    // Hàm gửi message chung — nhận history hiện tại để truyền lên backend
-    const sendMessage = async (userMessage, currentHistory) => {
-        const newHistory = [...currentHistory, { role: 'user', content: userMessage }];
-        setChatHistory(newHistory);
+        const userMsg = { role: 'user', content: 'Hãy phân tích code của tôi và gợi ý cách sửa lỗi (chỉ gợi ý, tuyệt đối không đưa code giải).' };
+        setChatHistory([userMsg]);
         setAiLoading(true);
 
         try {
-            const response = await axios.post(`${BACKEND}/api/ai/chat`, {
+            const payload = {
+                problemId: Number(problemId),
                 code,
                 language,
-                errorMessage: result,
-                history: newHistory
-            });
-            setChatHistory(prev => [...prev, { role: 'model', content: response.data }]);
-        } catch (error) {
-            setChatHistory(prev => [...prev, {
-                role: 'model',
-                content: "Lỗi kết nối AI: " + error.message
-            }]);
+                errorMessage: typeof runResult === 'string' ? runResult : (judgeResult?.compileError || ''),
+                testCaseResults: judgeResult?.results || [],
+                history: [userMsg]
+            };
+            const res = await axios.post(`${BACKEND}/api/ai/chat-with-context`, payload);
+            setChatHistory([userMsg, { role: 'model', content: res.data }]);
+        } catch (e) {
+            setChatHistory([userMsg, { role: 'model', content: 'Lỗi: ' + e.message }]);
         }
         setAiLoading(false);
     };
 
-    // Reset cuộc hội thoại
-    const handleResetChat = () => {
-        setChatHistory([]);
-        setInputText('');
-    };
-
-    // Enter gửi, Shift+Enter xuống dòng
-    const handleKeyDown = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendFollowUp();
-        }
-    };
-
-    // Render từng bubble tin nhắn
     const renderMessage = (msg, idx) => {
         const isUser = msg.role === 'user';
         return (
-            <div key={idx} className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'} mb-4`}>
-                {/* Avatar */}
-                <div className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-xs font-bold
-                    ${isUser ? 'bg-emerald-600 text-white' : 'bg-violet-600 text-white'}`}>
+            <div key={idx} className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''} mb-4`}>
+                <div className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold shadow-sm
+                    ${isUser ? 'bg-blue-600 text-white' : 'bg-purple-100 text-purple-600 border border-purple-200'}`}>
                     {isUser ? 'SV' : '✦'}
                 </div>
-
-                {/* Bubble */}
-                <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed
+                <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-[13px] leading-relaxed shadow-sm
                     ${isUser
-                        ? 'bg-emerald-900/50 text-emerald-100 rounded-tr-sm'
-                        : 'bg-gray-800 text-gray-200 rounded-tl-sm'
-                    }`}>
+                        ? 'bg-blue-50 text-blue-900 border border-blue-100 rounded-tr-sm'
+                        : 'bg-white border border-gray-200 text-gray-700 rounded-tl-sm'}`}>
                     {msg.content.split('\n').map((line, i) => {
-                        if (line.startsWith('- ') || line.startsWith('* ')) {
-                            return (
-                                <div key={i} className="flex gap-2 mt-1">
-                                    <span className="text-violet-400 shrink-0">›</span>
-                                    <span>{line.slice(2)}</span>
-                                </div>
-                            );
-                        }
-                        if (line.startsWith('**') && line.endsWith('**')) {
-                            return <p key={i} className="font-bold text-white mt-2 mb-1">{line.replace(/\*\*/g, '')}</p>;
-                        }
+                        if (line.startsWith('- ') || line.startsWith('* '))
+                            return <div key={i} className="flex gap-2 mt-1"><span className="text-purple-400 shrink-0">›</span><span>{line.slice(2)}</span></div>;
+                        if (line.startsWith('**') && line.endsWith('**'))
+                            return <p key={i} className="font-bold text-gray-900 mt-2 mb-1">{line.replace(/\*\*/g, '')}</p>;
                         if (!line.trim()) return <div key={i} className="h-1" />;
                         return <p key={i} className="mt-0.5">{line}</p>;
                     })}
@@ -127,204 +162,216 @@ const CodeEditor = () => {
         );
     };
 
+    if (probLoading) return <div className="min-h-[calc(100vh-4rem)] bg-slate-950 flex justify-center items-center text-slate-400">Loading...</div>;
+    if (!problem) return <div className="min-h-[calc(100vh-4rem)] bg-slate-950 flex justify-center items-center text-red-400">Không tìm thấy bài tập</div>;
+
     return (
-        <div className="min-h-screen bg-gray-950 text-gray-100 font-mono flex flex-col">
-
-            {/* HEADER */}
-            <div className="border-b border-gray-800 px-6 py-3 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3">
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></div>
-                    <h1 className="text-base font-bold tracking-tight text-white">
-                        Code Judge <span className="text-emerald-400">DATN</span>
-                    </h1>
-                    <span className="text-xs text-gray-500">— Hoàng Nguyễn</span>
+        <div className="h-[calc(100vh-4rem)] flex flex-col md:flex-row bg-slate-950 text-slate-300">
+            {/* Pane Trái */}
+            <div className="w-full md:w-5/12 flex flex-col border-r border-slate-800 bg-slate-900 h-full">
+                {/* Tabs */}
+                <div className="flex bg-slate-900 border-b border-slate-800">
+                    <button onClick={() => setActiveLeftTab('description')} className={`px-4 py-3 text-sm font-medium border-b-2 ${activeLeftTab === 'description' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>Đề bài</button>
+                    <button onClick={() => setActiveLeftTab('testcases')} className={`px-4 py-3 text-sm font-medium border-b-2 ${activeLeftTab === 'testcases' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>Testcase Tự Do</button>
+                    <button onClick={() => setActiveLeftTab('ai')} className={`px-4 py-3 text-sm font-medium border-b-2 flex items-center gap-1 ${activeLeftTab === 'ai' ? 'border-purple-500 text-purple-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}><Brain size={16}/> AI Trợ giúp</button>
                 </div>
-
-                <div className="flex items-center gap-2">
-                    {showAiPanel && chatHistory.length > 0 && (
-                        <button
-                            onClick={handleResetChat}
-                            className="px-3 py-1.5 rounded-lg border border-gray-700 hover:border-gray-500 text-xs text-gray-400 hover:text-gray-200 transition-all"
-                        >
-                            ↺ Reset chat
-                        </button>
+                
+                {/* Nội dung Pane Trái */}
+                <div className="flex-1 overflow-y-auto p-6">
+                    {activeLeftTab === 'description' && (
+                        <div className="prose prose-sm prose-invert max-w-none text-slate-300">
+                            <h2 className="text-2xl font-bold mb-2 text-white">{problem.title}</h2>
+                            <div className="flex gap-2 mb-6">
+                                <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium rounded">{problem.difficulty || 'Chưa phân loại'}</span>
+                                <span className="px-2 py-1 bg-slate-800 text-slate-300 border border-slate-700 text-xs font-medium rounded">{problem.language}</span>
+                                <span className="px-2 py-1 bg-slate-800 text-slate-300 border border-slate-700 text-xs font-medium rounded">⏱ {problem.timeLimitMs}ms</span>
+                            </div>
+                            <p className="whitespace-pre-wrap mb-4">{problem.description}</p>
+                            
+                            {problem.pdfUrl && (
+                                <div className="w-full mt-6 border border-slate-700 rounded-lg overflow-hidden bg-slate-200 h-[70vh]">
+                                    <object 
+                                        data={problem.pdfUrl} 
+                                        type="application/pdf" 
+                                        className="w-full h-full"
+                                    >
+                                        <div className="p-4 text-center text-slate-800">
+                                            <p>Trình duyệt của bạn không hỗ trợ xem PDF trực tiếp.</p>
+                                            <a href={problem.pdfUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline font-medium">Bấm vào đây để xem hoặc tải PDF</a>
+                                        </div>
+                                    </object>
+                                </div>
+                            )}
+                            
+                            {problem.testCases?.filter(tc => !tc.hidden).length > 0 && (
+                                <div className="mt-6">
+                                    <h4 className="font-bold mb-2 text-white">Ví dụ:</h4>
+                                    {problem.testCases.filter(tc => !tc.hidden).map((tc, idx) => (
+                                        <div key={idx} className="bg-slate-800/50 border border-slate-700 rounded-md p-4 mb-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <p className="text-xs text-slate-400 font-bold mb-1">Input:</p>
+                                                    <pre className="bg-slate-950 text-slate-300 p-2 rounded border border-slate-800 text-sm whitespace-pre-wrap">{tc.input}</pre>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-slate-400 font-bold mb-1">Output:</p>
+                                                    <pre className="bg-slate-950 text-slate-300 p-2 rounded border border-slate-800 text-sm whitespace-pre-wrap">{tc.expectedOutput}</pre>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    
+                    {activeLeftTab === 'testcases' && (
+                        <div className="h-full flex flex-col">
+                            <h3 className="font-bold text-white mb-2">Nhập Testcase tự do (Stdin)</h3>
+                            <textarea 
+                                value={stdin}
+                                onChange={e => setStdin(e.target.value)}
+                                className="w-full flex-1 bg-slate-950 border border-slate-700 text-slate-300 rounded-md p-3 font-mono text-sm focus:border-blue-500 focus:outline-none resize-none"
+                                placeholder="Nhập dữ liệu đầu vào..."
+                            />
+                        </div>
                     )}
 
-                    <button
-                        onClick={handleAskAI}
-                        disabled={aiLoading}
-                        className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-sm font-semibold shadow-lg shadow-violet-900/40"
-                    >
-                        {aiLoading && chatHistory.length === 0 ? (
-                            <>
-                                <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                                </svg>
-                                Đang hỏi...
-                            </>
-                        ) : (
-                            <><span>✦</span> Hỏi AI</>
-                        )}
-                    </button>
+                    {activeLeftTab === 'ai' && (
+                        <div className="flex flex-col h-full bg-slate-900 rounded-lg overflow-hidden">
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                {chatHistory.length === 0 && (
+                                    <div className="text-center text-slate-500 mt-10">
+                                        <Brain size={48} className="mx-auto mb-4 opacity-30" />
+                                        <p className="mb-6">Bấm nút bên dưới để AI Trợ giúp phân tích đoạn code bạn đang viết và đưa ra gợi ý sửa lỗi (AI sẽ không cung cấp lời giải trực tiếp).</p>
+                                        <button 
+                                            onClick={handleAskAi}
+                                            disabled={aiLoading}
+                                            className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-full transition disabled:opacity-50"
+                                        >
+                                            {aiLoading ? 'Đang phân tích...' : 'Nhận gợi ý từ AI Trợ giúp'}
+                                        </button>
+                                    </div>
+                                )}
+                                {chatHistory.map((msg, idx) => renderMessage(msg, idx))}
+                                {aiLoading && chatHistory.length > 0 && <div className="text-sm text-slate-500 animate-pulse flex items-center gap-2"><Brain size={16}/> Đang gõ...</div>}
+                                
+                                {chatHistory.length > 0 && !aiLoading && (
+                                    <div className="text-center mt-6 pt-4 border-t border-slate-800">
+                                        <button 
+                                            onClick={handleAskAi}
+                                            className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-purple-400 font-medium rounded-full transition"
+                                        >
+                                            Yêu cầu phân tích lại code mới
+                                        </button>
+                                    </div>
+                                )}
+                                <div ref={chatBottomRef} />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* BODY */}
-            <div className="flex flex-1 min-h-0">
-
-                {/* CỘT TRÁI: Editor + Output */}
-                <div className={`flex flex-col transition-all duration-300 min-h-0 ${showAiPanel ? 'w-1/2' : 'w-full'}`}>
-
-                    {/* Toolbar */}
-                    <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-900 border-b border-gray-800 shrink-0">
-                        <select
-                            value={language}
-                            onChange={(e) => setLanguage(e.target.value)}
-                            className="bg-gray-800 text-gray-200 text-sm px-3 py-1.5 rounded-md border border-gray-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                        >
+            {/* Pane Phải */}
+            <div className="w-full md:w-7/12 flex flex-col bg-[#1e1e1e] h-full relative">
+                {/* Editor Toolbar */}
+                <div className="h-12 bg-slate-900 flex items-center justify-between px-4 text-slate-300 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                        <Code size={16} className="text-blue-400" />
+                        <span className="text-sm font-medium">solution.{language}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <select value={language} onChange={e => setLanguage(e.target.value)} className="bg-slate-800 border border-slate-700 text-sm text-slate-300 rounded px-2 py-1 outline-none">
                             <option value="cpp">C++</option>
                             <option value="python">Python</option>
                         </select>
-
-                        <button
-                            onClick={handleRunCode}
-                            disabled={loading}
-                            className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm font-semibold"
-                        >
-                            {loading ? (
-                                <>
-                                    <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                                    </svg>
-                                    Đang chạy...
-                                </>
-                            ) : <>▶ Chạy Code</>}
-                        </button>
-                    </div>
-
-                    {/* Monaco Editor */}
-                    <div className="flex-1 min-h-0">
-                        <Editor
-                            height="100%"
-                            language={language === 'cpp' ? 'cpp' : 'python'}
-                            theme="vs-dark"
-                            value={code}
-                            onChange={(value) => setCode(value || '')}
-                            options={{
-                                fontSize: 14,
-                                minimap: { enabled: false },
-                                scrollBeyondLastLine: false,
-                                padding: { top: 12 },
-                            }}
-                        />
-                    </div>
-
-                    {/* Output */}
-                    <div className="border-t border-gray-800 bg-gray-900 shrink-0">
-                        <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-800">
-                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Output</span>
-                            {result && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">
-                                    {result.toLowerCase().includes('error') || result.includes('Lỗi') ? '❌ Lỗi' : '✓ OK'}
-                                </span>
-                            )}
-                        </div>
-                        <pre className="px-4 py-3 text-sm text-gray-300 min-h-[72px] max-h-[140px] overflow-auto whitespace-pre-wrap">
-                            {result || <span className="text-gray-600 italic">Kết quả sẽ hiển thị ở đây...</span>}
-                        </pre>
                     </div>
                 </div>
 
-                {/* CỘT PHẢI: AI Chat Panel */}
-                {showAiPanel && (
-                    <div className="w-1/2 border-l border-gray-800 flex flex-col bg-gray-900 min-h-0">
+                {/* Editor */}
+                <div className="flex-1 relative">
+                    <Editor
+                        height="100%"
+                        language={language}
+                        theme="vs-dark"
+                        value={code}
+                        onChange={val => setCode(val)}
+                        options={{ minimap: { enabled: false }, fontSize: 14, cursorBlinking: 'smooth', formatOnPaste: true }}
+                    />
+                </div>
 
-                        {/* Panel Header */}
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 shrink-0">
-                            <div className="flex items-center gap-2">
-                                <span className="text-violet-400">✦</span>
-                                <span className="text-sm font-bold text-white">Giảng viên AI</span>
-                                <span className="text-xs text-gray-500">— Thủy Lợi University</span>
-                            </div>
-                            <button
-                                onClick={() => setShowAiPanel(false)}
-                                className="text-gray-500 hover:text-gray-300 transition-colors"
-                            >✕</button>
+                {/* Console */}
+                <div className="h-2/5 bg-slate-900 border-t border-slate-800 flex flex-col">
+                    <div className="flex items-center justify-between px-4 py-2 bg-slate-800">
+                        <div className="flex gap-4">
+                            <button className="text-sm font-medium text-white">Console Output</button>
                         </div>
-
-                        {/* Messages */}
-                        <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0">
-                            {chatHistory.length === 0 && !aiLoading && (
-                                <div className="flex flex-col items-center justify-center h-full text-center text-gray-600 gap-2">
-                                    <span className="text-3xl">✦</span>
-                                    <p className="text-sm">Bấm <span className="text-violet-400 font-semibold">Hỏi AI</span> để bắt đầu</p>
-                                </div>
-                            )}
-
-                            {chatHistory.map((msg, idx) => renderMessage(msg, idx))}
-
-                            {/* Loading bubble */}
-                            {aiLoading && (
-                                <div className="flex gap-3 mb-4">
-                                    <div className="w-7 h-7 rounded-full bg-violet-600 shrink-0 flex items-center justify-center text-xs font-bold text-white">✦</div>
-                                    <div className="bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5">
-                                        <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{animationDelay:'0ms'}}></span>
-                                        <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{animationDelay:'150ms'}}></span>
-                                        <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{animationDelay:'300ms'}}></span>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div ref={chatBottomRef} />
-                        </div>
-
-                        {/* Gợi ý nhanh — hiện sau khi AI đã trả lời */}
-                        {chatHistory.some(m => m.role === 'model') && !aiLoading && (
-                            <div className="px-4 py-2 flex gap-2 flex-wrap border-t border-gray-800 shrink-0">
-                                {['Gợi ý cụ thể hơn', 'Cho ví dụ minh họa', 'Tại sao bị lỗi?'].map(suggestion => (
-                                    <button
-                                        key={suggestion}
-                                        onClick={() => setInputText(suggestion)}
-                                        className="text-xs px-3 py-1.5 rounded-full border border-gray-700 text-gray-400 hover:border-violet-500 hover:text-violet-300 transition-all"
-                                    >
-                                        {suggestion}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* Input chat */}
-                        <div className="px-4 py-3 border-t border-gray-800 shrink-0">
-                            <div className="flex gap-2 items-end">
-                                <textarea
-                                    value={inputText}
-                                    onChange={(e) => setInputText(e.target.value)}
-                                    onKeyDown={handleKeyDown}
-                                    placeholder="Hỏi thêm... (Enter gửi, Shift+Enter xuống dòng)"
-                                    rows={2}
-                                    className="flex-1 bg-gray-800 text-gray-200 text-sm px-3 py-2.5 rounded-xl border border-gray-700 focus:outline-none focus:border-violet-500 resize-none placeholder-gray-600 transition-colors"
-                                />
-                                <button
-                                    onClick={handleSendFollowUp}
-                                    disabled={!inputText.trim() || aiLoading}
-                                    className="px-3 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0"
-                                >
-                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-                                    </svg>
-                                </button>
-                            </div>
-                            <p className="text-xs text-gray-600 mt-1.5 ml-1">
-                                💡 Thầy AI gợi ý dần từng bước — không cho đáp án trực tiếp
-                            </p>
+                        <div className="flex gap-2">
+                            <button onClick={handleRun} disabled={isProcessing} className="flex items-center gap-1 px-4 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm transition disabled:opacity-50 font-medium">
+                                <Play size={14} /> Chạy thử
+                            </button>
+                            <button onClick={handleSubmit} disabled={isProcessing} className="flex items-center gap-1 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-sm font-medium transition disabled:opacity-50">
+                                <CheckCircle size={14} /> Nộp bài
+                            </button>
                         </div>
                     </div>
-                )}
+                    
+                    <div className="flex-1 overflow-y-auto p-4 font-mono text-sm bg-[#1e1e1e]">
+                        {isProcessing ? (
+                            <div className="text-blue-400 animate-pulse">Đang xử lý trên máy chủ...</div>
+                        ) : judgeResult ? (
+                            <div>
+                                <div className="mb-4">
+                                    <span className="text-slate-400">Kết quả tổng: </span>
+                                    <StatusBadge status={judgeResult.finalStatus} />
+                                </div>
+                                {judgeResult.compileError ? (
+                                    <div className="text-red-400 whitespace-pre-wrap">{judgeResult.compileError}</div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {judgeResult.results?.map((res, i) => (
+                                            <div key={i} className="bg-[#252525] rounded border border-[#333] overflow-hidden">
+                                                <div className="flex justify-between items-center p-3 bg-[#1e1e1e] border-b border-[#333]">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-slate-300 font-bold text-sm">Test {i + 1}</span>
+                                                        <StatusBadge status={res.status} />
+                                                    </div>
+                                                    <span className="text-slate-500 text-xs">{res.runtimeMs}ms</span>
+                                                </div>
+                                                <div className="p-3 space-y-3">
+                                                    {res.input !== undefined && res.input !== null && (
+                                                        <div>
+                                                            <span className="text-xs font-bold text-slate-500 block mb-1">INPUT:</span>
+                                                            <pre className="bg-[#1e1e1e] text-slate-300 p-2 rounded text-xs whitespace-pre-wrap">{res.input}</pre>
+                                                        </div>
+                                                    )}
+                                                    {res.expected !== undefined && res.expected !== null && (
+                                                        <div>
+                                                            <span className="text-xs font-bold text-slate-500 block mb-1">EXPECTED OUTPUT:</span>
+                                                            <pre className="bg-[#1e1e1e] text-emerald-400 p-2 rounded text-xs whitespace-pre-wrap">{res.expected}</pre>
+                                                        </div>
+                                                    )}
+                                                    {res.actual !== undefined && res.actual !== null && (
+                                                        <div>
+                                                            <span className="text-xs font-bold text-slate-500 block mb-1">ACTUAL OUTPUT:</span>
+                                                            <pre className="bg-[#1e1e1e] text-slate-300 p-2 rounded text-xs whitespace-pre-wrap">{res.actual}</pre>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : runResult ? (
+                            <div className="text-slate-300 whitespace-pre-wrap">{runResult}</div>
+                        ) : (
+                            <div className="text-slate-500">Kết quả chạy thử sẽ hiển thị tại đây...</div>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );
-};
-
-export default CodeEditor;
+}
