@@ -40,7 +40,7 @@ const CourseViewer = () => {
 
   const fetchCourse = async () => {
     try {
-      const response = await fetch(`http://localhost:8080/api/courses/${id}`);
+      const response = await fetch(`https://datn-java-backend.onrender.com/api/courses/${id}`);
       if (!response.ok) throw new Error('Lỗi khi tải dữ liệu khóa học');
       const data = await response.json();
       setCourse(data);
@@ -92,7 +92,7 @@ const CourseViewer = () => {
   const fetchSectionProblems = async (sectionId) => {
     setProblemsLoading(true);
     try {
-      const res = await axios.get(`http://localhost:8080/api/problems/section/${sectionId}`);
+      const res = await axios.get(`https://datn-java-backend.onrender.com/api/problems/section/${sectionId}`);
       setSectionProblems(res.data);
     } catch (err) {
       console.error("Lỗi lấy bài tập", err);
@@ -104,7 +104,7 @@ const CourseViewer = () => {
   const fetchUserSubmissions = async () => {
     if (!user) return;
     try {
-      const res = await axios.get(`http://localhost:8080/api/submissions/history`);
+      const res = await axios.get(`https://datn-java-backend.onrender.com/api/submissions/history`);
       setUserSubmissions(res.data);
     } catch (err) {
       console.error("Lỗi lấy lịch sử", err);

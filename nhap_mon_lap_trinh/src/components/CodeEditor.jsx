@@ -5,7 +5,7 @@ import { Play, CheckCircle, Code, Brain, ChevronRight } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
-const BACKEND = 'http://localhost:8080';
+const BACKEND = 'https://datn-java-backend.onrender.com';
 
 // Badge trạng thái testcase
 const StatusBadge = ({ status }) => {

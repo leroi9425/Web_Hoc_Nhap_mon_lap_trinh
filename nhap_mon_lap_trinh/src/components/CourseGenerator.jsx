@@ -35,7 +35,7 @@ const CourseGenerator = () => {
       const fileHash = await calculateFileHash(file);
       
       // 2. Check if Hash exists in Database
-      const checkRes = await fetch(`http://localhost:8080/api/courses/check-hash/${fileHash}`);
+      const checkRes = await fetch(`https://datn-java-backend.onrender.com/api/courses/check-hash/${fileHash}`);
       if (checkRes.ok) {
           const checkData = await checkRes.json();
           if (checkData.exists) {
@@ -49,7 +49,7 @@ const CourseGenerator = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('http://localhost:8000/generate-course', {
+      const response = await fetch('https://ai-service-datn.onrender.com/generate-course', {
         method: 'POST',
         body: formData,
       });
@@ -77,7 +77,7 @@ const CourseGenerator = () => {
     setSaveStatus('saving');
     try {
       const finalResult = { ...result, course_name: customCourseName };
-      const response = await fetch('http://localhost:8080/api/courses/save-generated', {
+      const response = await fetch('https://datn-java-backend.onrender.com/api/courses/save-generated', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

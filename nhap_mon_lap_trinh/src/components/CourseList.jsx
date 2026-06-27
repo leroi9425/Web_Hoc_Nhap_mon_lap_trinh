@@ -14,7 +14,7 @@ const CourseList = () => {
 
   const fetchCourses = async () => {
     try {
-      const response = await axios.get('http://localhost:8080/api/courses');
+      const response = await axios.get('https://datn-java-backend.onrender.com/api/courses');
       setCourses(response.data);
     } catch (err) {
       console.error(err);

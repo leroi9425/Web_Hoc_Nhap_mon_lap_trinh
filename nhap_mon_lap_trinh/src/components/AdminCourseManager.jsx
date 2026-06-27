@@ -15,7 +15,7 @@ const AdminCourseManager = () => {
   const fetchCourses = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('http://localhost:8080/api/courses');
+      const response = await axios.get('https://datn-java-backend.onrender.com/api/courses');
       setCourses(response.data);
     } catch (err) {
       console.error(err);
@@ -28,7 +28,7 @@ const AdminCourseManager = () => {
     e.stopPropagation();
     if (!window.confirm("CẢNH BÁO: Xóa khóa học sẽ xóa vĩnh viễn tất cả chương, bài học và bài tập bên trong! Bạn có chắc chắn không?")) return;
     try {
-      await axios.delete(`http://localhost:8080/api/courses/${id}`);
+      await axios.delete(`https://datn-java-backend.onrender.com/api/courses/${id}`);
       fetchCourses();
     } catch (error) {
       alert("Lỗi khi xóa: " + error.message);

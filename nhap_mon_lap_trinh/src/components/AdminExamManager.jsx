@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Plus, RefreshCw, FileText, CheckSquare, Square, Trash2 } from 'lucide-react';
 
-const BACKEND = 'http://localhost:8080';
+const BACKEND = 'https://datn-java-backend.onrender.com';
 
 const AdminExamManager = () => {
     const [exams, setExams] = useState([]);

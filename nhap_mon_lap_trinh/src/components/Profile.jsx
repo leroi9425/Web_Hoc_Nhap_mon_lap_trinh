@@ -13,7 +13,7 @@ const Profile = () => {
       setLoading(false);
       return;
     }
-    axios.get('http://localhost:8080/api/submissions/history')
+    axios.get('https://datn-java-backend.onrender.com/api/submissions/history')
       .then(res => setSubmissions(res.data))
       .catch(err => console.error(err))
       .finally(() => setLoading(false));

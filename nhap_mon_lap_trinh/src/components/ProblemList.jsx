@@ -15,8 +15,8 @@ const ProblemList = () => {
     const fetchData = async () => {
       try {
         const [probsRes, statusRes] = await Promise.all([
-          axios.get('http://localhost:8080/api/problems'),
-          user ? axios.get('http://localhost:8080/api/submissions/my-status') : Promise.resolve({ data: {} })
+          axios.get('https://datn-java-backend.onrender.com/api/problems'),
+          user ? axios.get('https://datn-java-backend.onrender.com/api/submissions/my-status') : Promise.resolve({ data: {} })
         ]);
         setProblems(probsRes.data);
         setUserSubmissions(statusRes.data);

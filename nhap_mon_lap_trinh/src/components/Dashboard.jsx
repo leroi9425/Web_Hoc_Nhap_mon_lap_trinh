@@ -11,7 +11,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!user) return;
-    axios.get('http://localhost:8080/api/submissions/history')
+    axios.get('https://datn-java-backend.onrender.com/api/submissions/history')
       .then(res => {
         const passedProbs = new Set(res.data.filter(s => s.status === 'PASSED').map(s => s.problem.id));
         setSolvedCount(passedProbs.size);

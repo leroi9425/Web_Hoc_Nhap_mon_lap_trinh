@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-const BACKEND = 'http://localhost:8080';
+const BACKEND = 'https://datn-java-backend.onrender.com';
 
 export default function ProblemManager() {
     const navigate = useNavigate();

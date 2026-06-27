@@ -5,7 +5,7 @@ import { Play, CheckCircle, Clock, Save, ChevronRight, XCircle, Code } from 'luc
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
-const BACKEND = 'http://localhost:8080';
+const BACKEND = 'https://datn-java-backend.onrender.com';
 
 const StatusBadge = ({ status }) => {
     const map = {

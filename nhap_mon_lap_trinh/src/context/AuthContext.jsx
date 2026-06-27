@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }) => {
 
     const login = async (googleIdToken, isTestInstructor = false) => {
         try {
-            const response = await axios.post('http://localhost:8080/api/auth/google', {
+            const response = await axios.post('https://datn-java-backend.onrender.com/api/auth/google', {
                 idToken: googleIdToken,
                 isTestInstructor: isTestInstructor
             });
