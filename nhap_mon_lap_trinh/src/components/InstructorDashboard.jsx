@@ -9,6 +9,13 @@ const InstructorDashboard = () => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
 
+    const handleLogout = () => {
+        if (window.confirm('Bạn có chắc chắn muốn đăng xuất không?')) {
+            logout();
+            navigate('/login');
+        }
+    };
+
     const [stats, setStats] = useState({
         totalStudents: 0,
         totalClasses: 0,
@@ -66,7 +73,7 @@ const InstructorDashboard = () => {
                 </div>
                 
                 <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-3 cursor-pointer group" onClick={logout} title="Nhấn để đăng xuất">
+                    <div className="flex items-center gap-3 cursor-pointer group" onClick={handleLogout} title="Nhấn để đăng xuất">
                         <span className="text-sm font-semibold text-slate-700 group-hover:text-blue-600 transition-colors">{user?.username || 'Giảng viên'}</span>
                         <div className="w-10 h-10 rounded-full border-2 border-blue-500 overflow-hidden shadow-sm group-hover:shadow-md transition-shadow">
                             <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.username || 'abc'}`} alt="Avatar" />

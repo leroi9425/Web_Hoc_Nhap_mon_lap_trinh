@@ -245,7 +245,7 @@ export default function ProblemManager() {
             setEditingProblemId(null);
             setCreationMode('manual');
         } catch (err) {
-            alert("Lỗi: " + err.message);
+            alert("Lỗi: " + (err.response?.data || err.message));
         } finally {
             setIsGeneratingProblem(false);
         }

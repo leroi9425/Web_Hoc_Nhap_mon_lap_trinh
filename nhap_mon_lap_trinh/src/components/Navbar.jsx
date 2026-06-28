@@ -10,8 +10,10 @@ const Navbar = () => {
   const currentPath = location.pathname;
 
   const handleLogout = () => {
-    logout();
-    navigate('/');
+    if (window.confirm('Bạn có chắc chắn muốn đăng xuất không?')) {
+        logout();
+        navigate('/login');
+    }
   };
 
   return (
