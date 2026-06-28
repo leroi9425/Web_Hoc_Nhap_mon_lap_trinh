@@ -155,6 +155,9 @@ const TeacherClassRoom = () => {
             alert('Giao bài thành công!');
             closeAssignModal();
             fetchClasses(); 
+            if (isViewModalOpen && viewingClass) {
+                openViewModal(viewingClass);
+            }
         } catch (error) {
             alert('Lỗi khi giao bài');
         }
@@ -226,6 +229,50 @@ const TeacherClassRoom = () => {
         setViewingStudents([]);
     };
 
+    const handleDeleteStudentFromView = async (email) => {
+        if (!window.confirm(`Bạn có chắc chắn muốn xóa sinh viên ${email} khỏi lớp này?`)) return;
+        try {
+            const newEmailsList = viewingClass.studentEmails.split(',').map(e => e.trim()).filter(e => e !== '' && e !== email);
+            const studentEmailsStr = newEmailsList.join(',');
+            await axios.put(`${BACKEND}/api/classrooms/${viewingClass.id}/students`, { studentEmails: studentEmailsStr }, getAuthHeaders());
+            
+            fetchClasses();
+            const updatedClass = { ...viewingClass, studentEmails: studentEmailsStr };
+            openViewModal(updatedClass);
+        } catch (error) {
+            console.error(error);
+            alert('Lỗi khi xóa sinh viên khỏi lớp');
+        }
+    };
+
+    const handleDeleteAssignmentFromView = async (assignmentId) => {
+        if (!window.confirm('Bạn có chắc chắn muốn hủy giao bài tập này cho lớp?')) return;
+        try {
+            await axios.delete(`${BACKEND}/api/classrooms/${viewingClass.id}/assignments/${assignmentId}`, getAuthHeaders());
+            fetchClasses();
+            openViewModal(viewingClass);
+        } catch (error) {
+            console.error(error);
+            alert('Lỗi khi xóa bài tập');
+        }
+    };
+
+    const handleDeleteClass = async (classId, className, e) => {
+        if (e) e.stopPropagation();
+        if (!window.confirm(`⚠️ CẢNH BÁO: Bạn có chắc chắn muốn XÓA HOÀN TOÀN lớp "${className}" không?\n\nTất cả bài tập đã giao cho lớp này cũng sẽ bị xóa vĩnh viễn!`)) return;
+        try {
+            await axios.delete(`${BACKEND}/api/classrooms/${classId}`, getAuthHeaders());
+            alert('Đã xóa lớp thành công!');
+            if (isViewModalOpen && viewingClass && viewingClass.id === classId) {
+                closeViewModal();
+            }
+            fetchClasses();
+        } catch (error) {
+            console.error(error);
+            alert('Lỗi khi xóa lớp');
+        }
+    };
+
     // Pill Handlers (Create Class)
     const addEmailToCreateClass = (email) => {
         if (!createClassEmails.includes(email)) {
@@ -259,6 +306,10 @@ const TeacherClassRoom = () => {
                 alert('Cập nhật danh sách sinh viên thành công!');
                 closeManageModal();
                 fetchClasses();
+                if (isViewModalOpen && viewingClass) {
+                    const updatedClass = { ...viewingClass, studentEmails: currentEmailsList.join(',') };
+                    openViewModal(updatedClass);
+                }
             } catch (error) {
                 console.error(error);
                 alert('Lỗi khi lưu danh sách sinh viên');
@@ -405,7 +456,7 @@ const TeacherClassRoom = () => {
 
             {/* Modal Giao Bài Tập */}
             {isAssignModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm transition-opacity">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm transition-opacity p-4">
                     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6 lg:p-8 transform transition-transform scale-100 border border-slate-200">
                         <div className="flex justify-between items-center mb-6">
                             <div>
@@ -458,9 +509,9 @@ const TeacherClassRoom = () => {
                 </div>
             )}
 
-            {/* Modal Quản lý Sinh viên */}
+            {/* Modal Quản lý Sinh Viên */}
             {isManageModalOpen && manageModalClass && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm transition-opacity py-10">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm transition-opacity py-10">
                     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6 lg:p-8 transform transition-transform scale-100 border border-slate-200 flex flex-col max-h-full">
                         
                         <div className="flex justify-between items-center mb-6 flex-shrink-0">
@@ -589,22 +640,29 @@ const TeacherClassRoom = () => {
                                 <h3 className="text-2xl font-bold text-slate-900">Chi tiết lớp: {viewingClass.name}</h3>
                                 <p className="text-sm text-slate-500 mt-1 font-mono">Mã lớp: CLS-{viewingClass.id}A9</p>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                                 <button 
-                                    onClick={() => { closeViewModal(); openManageModal(viewingClass); }} 
+                                    onClick={() => handleDeleteClass(viewingClass.id, viewingClass.name)} 
+                                    className="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 border border-red-100 mr-2"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    Xóa Lớp
+                                </button>
+                                <button 
+                                    onClick={() => openManageModal(viewingClass)} 
                                     className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5"
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                                    Quản lý SV
+                                    Thêm SV
                                 </button>
                                 <button 
-                                    onClick={() => { closeViewModal(); openAssignModal(viewingClass.id, viewingClass.name); }} 
+                                    onClick={() => openAssignModal(viewingClass.id, viewingClass.name)} 
                                     className="bg-[#10b981] hover:bg-[#059669] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm flex items-center gap-1.5"
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                                     Giao Bài
                                 </button>
-                                <button type="button" onClick={closeViewModal} className="text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-full p-2.5 transition-colors ml-2">
+                                <button type="button" onClick={closeViewModal} className="text-slate-400 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-full p-2.5 transition-colors ml-2">
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                                 </button>
                             </div>
@@ -628,7 +686,7 @@ const TeacherClassRoom = () => {
                                     <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
                                     Danh sách Sinh viên
                                 </h4>
-                                <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 max-h-48 overflow-y-auto">
+                                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 max-h-[300px] overflow-y-auto custom-scrollbar">
                                     <ul className="space-y-2">
                                         {(!viewingClass.studentEmails || viewingClass.studentEmails.trim() === '') && (
                                             <li className="text-sm text-slate-500 italic text-center py-2">Lớp này chưa có sinh viên nào.</li>
@@ -636,14 +694,23 @@ const TeacherClassRoom = () => {
                                         {viewingClass.studentEmails && viewingClass.studentEmails.split(',').map(e => e.trim()).filter(e => e !== '').map((email, idx) => {
                                             const student = viewingStudents.find(s => s.email === email);
                                             return (
-                                                <li key={idx} className="flex items-center gap-3 bg-white border border-slate-100 p-3 rounded-xl shadow-sm">
-                                                    <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-bold overflow-hidden border border-blue-200">
-                                                        {student && student.avatar ? <img src={student.avatar} alt={student.name} className="w-full h-full object-cover" /> : (student ? student.name.charAt(0).toUpperCase() : '?')}
+                                                <li key={idx} className="flex justify-between items-center bg-white border border-slate-100 p-3 rounded-xl shadow-sm group">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-bold overflow-hidden border border-blue-200">
+                                                            {student && student.avatar ? <img src={student.avatar} alt={student.name} className="w-full h-full object-cover" /> : (student ? student.name.charAt(0).toUpperCase() : '?')}
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-bold text-slate-800">{student ? student.name : 'Thành viên mới (Chưa cập nhật)'}</span>
+                                                            <span className="text-xs font-medium text-slate-500 font-mono mt-0.5">{email}</span>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-sm font-bold text-slate-800">{student ? student.name : 'Thành viên mới (Chưa cập nhật)'}</span>
-                                                        <span className="text-xs font-medium text-slate-500 font-mono mt-0.5">{email}</span>
-                                                    </div>
+                                                    <button 
+                                                        onClick={() => handleDeleteStudentFromView(email)} 
+                                                        className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                                        title="Xóa khỏi lớp"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                    </button>
                                                 </li>
                                             );
                                         })}
@@ -657,24 +724,32 @@ const TeacherClassRoom = () => {
                                     <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                                     Danh sách Bài tập
                                 </h4>
-                                <div className="bg-blue-50/50 rounded-xl border border-blue-100 p-4 max-h-60 overflow-y-auto">
+                                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 max-h-[300px] overflow-y-auto custom-scrollbar">
                                     <ul className="space-y-3">
                                         {viewingAssignments.length === 0 && (
                                             <li className="text-sm text-slate-500 italic text-center py-2">Chưa có bài tập nào được giao cho lớp này.</li>
                                         )}
-                                        {viewingAssignments.map((assignment) => (
-                                            <li key={assignment.id} className="bg-white border border-blue-200 p-3.5 rounded-xl shadow-sm">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <h5 className="font-bold text-slate-800 text-sm leading-tight">{assignment.problem?.title || 'Bài tập không xác định'}</h5>
-                                                </div>
-                                                <div className="flex flex-col gap-1 text-xs text-slate-600">
-                                                    <p className="flex items-center gap-1.5">
-                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                                                        Hạn nộp: <span className="font-semibold text-red-600">{new Date(assignment.deadline).toLocaleString('vi-VN')}</span>
-                                                    </p>
-                                                </div>
-                                            </li>
-                                        ))}
+                                        {viewingAssignments.map((a, idx) => {
+                                            const p = problems.find(prob => prob.id === a.problemId);
+                                            return (
+                                                <li key={idx} className="flex justify-between items-center bg-white border border-slate-100 p-3.5 rounded-xl shadow-sm group">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-bold text-slate-800">{p ? p.title : `Bài tập ID: ${a.problemId}`}</span>
+                                                        <span className="text-xs font-semibold text-red-500 mt-1 flex items-center gap-1">
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                            Hạn nộp: {new Date(a.deadline).toLocaleString('vi-VN')}
+                                                        </span>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => handleDeleteAssignmentFromView(a.id)} 
+                                                        className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                                        title="Hủy giao bài"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                    </button>
+                                                </li>
+                                            );
+                                        })}
                                     </ul>
                                 </div>
                             </div>
