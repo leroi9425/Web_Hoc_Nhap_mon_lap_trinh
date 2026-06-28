@@ -31,6 +31,7 @@ const Navbar = () => {
                   <Link to="/docs" className={`hover:text-blue-400 ${currentPath.startsWith('/docs') ? 'text-blue-400' : 'text-slate-300'}`}>Tài liệu</Link>
                   <Link to="/problems" className={`hover:text-blue-400 ${currentPath.startsWith('/problem') ? 'text-blue-400' : 'text-slate-300'}`}>Bài tập</Link>
                   <Link to="/exams" className={`hover:text-blue-400 font-bold ${currentPath.startsWith('/exam') ? 'text-blue-400' : 'text-slate-300'}`}>Thi cử</Link>
+                  <Link to="/my-assignments" className={`hover:text-blue-400 ${currentPath.startsWith('/my-assignments') ? 'text-blue-400' : 'text-slate-300'}`}>Lớp học</Link>
                   <div className="h-6 w-px bg-slate-700"></div>
                   <Link to="/profile" className="flex items-center gap-2 hover:text-emerald-400">
                     <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center font-bold">
@@ -43,6 +44,7 @@ const Navbar = () => {
                   <Link to="/admin/dashboard" className={`hover:text-purple-400 ${currentPath.startsWith('/admin/dashboard') ? 'text-purple-400' : 'text-slate-300'}`}>Dashboard</Link>
                   <Link to="/admin/docs" className={`hover:text-purple-400 ${currentPath.startsWith('/admin/docs') ? 'text-purple-400' : 'text-slate-300'}`}>Tài liệu</Link>
                   <Link to="/admin/problems" className={`hover:text-purple-400 ${currentPath === '/admin/problems' ? 'text-purple-400' : 'text-slate-300'}`}>Bài tập</Link>
+                  <Link to="/admin/classrooms" className={`hover:text-purple-400 ${currentPath === '/admin/classrooms' ? 'text-purple-400' : 'text-slate-300'}`}>Lớp học</Link>
                   <Link to="/admin/exams" className={`hover:text-purple-400 ${currentPath.startsWith('/admin/exams') ? 'text-purple-400' : 'text-slate-300'}`}>Đề thi</Link>
                   <Link to="/admin/problems/ai-generate" className={`flex items-center gap-1 hover:text-purple-400 ${currentPath.includes('ai-generate') ? 'text-purple-400' : 'text-slate-300'}`}>
                     <Sparkles size={16} /> AI Gen

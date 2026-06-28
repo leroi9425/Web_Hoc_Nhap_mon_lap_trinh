@@ -4,6 +4,8 @@ import { Search, Filter, CheckCircle, XCircle } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
+const BACKEND = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
 const ProblemList = () => {
   const [problems, setProblems] = useState([]);
   const [userSubmissions, setUserSubmissions] = useState({});
@@ -15,8 +17,8 @@ const ProblemList = () => {
     const fetchData = async () => {
       try {
         const [probsRes, statusRes] = await Promise.all([
-          axios.get('https://datn-java-backend.onrender.com/api/problems'),
-          user ? axios.get('https://datn-java-backend.onrender.com/api/submissions/my-status') : Promise.resolve({ data: {} })
+          axios.get(`${BACKEND}/api/problems`),
+          user ? axios.get(`${BACKEND}/api/submissions/my-status`) : Promise.resolve({ data: {} })
         ]);
         setProblems(probsRes.data);
         setUserSubmissions(statusRes.data);
@@ -63,9 +65,9 @@ const ProblemList = () => {
             <thead>
               <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
                 <th className="p-4 font-medium w-16 text-center">Trạng thái</th>
-                <th className="p-4 font-medium">Tên bài</th>
-                <th className="p-4 font-medium">Độ khó / Tags</th>
-                <th className="p-4 font-medium hidden md:table-cell">Ngôn ngữ</th>
+                <th className="p-4 text-left font-semibold text-slate-500">Tên bài</th>
+                <th className="p-4 text-left font-semibold text-slate-500">Phân loại</th>
+                <th className="p-4 text-left font-semibold text-slate-500 hidden md:table-cell">Ngôn ngữ</th>
               </tr>
             </thead>
             <tbody>
@@ -80,11 +82,9 @@ const ProblemList = () => {
                     </td>
                     <td className="p-4">
                       <div className="flex gap-2 items-center">
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600">
-                          {prob.difficulty || 'Chưa phân loại'}
+                        <span className="px-3 py-1 text-xs font-medium rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">
+                          {prob.categoryName || 'Tự do'}
                         </span>
-                        {/* Hiển thị một tag giả để giống giao diện mẫu */}
-                        <span className="px-2 py-1 bg-slate-100 text-slate-500 text-xs rounded-md">Cơ bản</span>
                       </div>
                     </td>
                     <td className="p-4 hidden md:table-cell">

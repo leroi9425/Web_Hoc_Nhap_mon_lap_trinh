@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { Play, CheckCircle, Code, Brain, ChevronRight } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
-const BACKEND = 'https://datn-java-backend.onrender.com';
+const BACKEND = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 // Badge trạng thái testcase
 const StatusBadge = ({ status }) => {
@@ -35,6 +35,9 @@ const StatusBadge = ({ status }) => {
 export default function CodeEditor() {
     const { problemId } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
+    const queryParams = new URLSearchParams(location.search);
+    const assignmentId = queryParams.get('assignmentId');
 
     // Bài tập
     const [problem, setProblem] = useState(null);
@@ -55,8 +58,10 @@ export default function CodeEditor() {
     const [activeConsoleTab, setActiveConsoleTab] = useState('output'); // output
     
     // AI Analysis
+    // AI Analysis
     const [chatHistory, setChatHistory] = useState([]);
     const [aiLoading, setAiLoading] = useState(false);
+    const [hintLoading, setHintLoading] = useState(false);
     const chatBottomRef = useRef(null);
 
     useEffect(() => {
@@ -78,11 +83,22 @@ export default function CodeEditor() {
             })
             .catch(err => console.error("Could not fetch latest submission:", err));
             
+        // Lấy lịch sử chat AI
+        axios.get(`${BACKEND}/api/ai/history/${problemId}`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        })
+            .then(res => {
+                if (res.data && res.data.length > 0) {
+                    setChatHistory(res.data);
+                }
+            })
+            .catch(err => console.error("Could not fetch chat history:", err));
+            
     }, [problemId]);
 
     useEffect(() => {
         chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [chatHistory, aiLoading]);
+    }, [chatHistory, aiLoading, hintLoading]);
 
     const handleRun = async () => {
         setIsProcessing(true);
@@ -102,7 +118,9 @@ export default function CodeEditor() {
         setActiveConsoleTab('output');
         setRunResult('');
         try {
-            const res = await axios.post(`${BACKEND}/api/judge/submit`, { problemId: Number(problemId), code, language });
+            const payload = { problemId: Number(problemId), code, language };
+            if (assignmentId) payload.assignmentId = Number(assignmentId);
+            const res = await axios.post(`${BACKEND}/api/judge/submit`, payload);
             setJudgeResult(res.data);
         } catch (e) {
             setJudgeResult({ finalStatus: 'ERROR', compileError: e.message, results: [] });
@@ -110,14 +128,32 @@ export default function CodeEditor() {
         setIsProcessing(false);
     };
 
+    const handleGetHint = async () => {
+        setHintLoading(true);
+        try {
+            const res = await axios.get(`${BACKEND}/api/ai/hint/${problemId}`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            setChatHistory(prev => [...prev, { role: 'model', content: res.data }]);
+        } catch (e) {
+            setChatHistory(prev => [...prev, { role: 'model', content: 'Lỗi khi lấy gợi ý: ' + e.message }]);
+        }
+        setHintLoading(false);
+    };
+
     const handleAskAi = async () => {
         if (!code || code.trim() === '' || code.includes('// Viết code của bạn ở đây')) {
-            setChatHistory([{ role: 'model', content: 'Vui lòng viết code thực tế trước khi nhờ AI phân tích nhé!' }]);
+            setChatHistory(prev => [...prev, { role: 'model', content: 'Vui lòng viết code thực tế trước khi nhờ AI phân tích lỗi nhé!' }]);
             return;
         }
 
-        const userMsg = { role: 'user', content: 'Hãy phân tích code của tôi và gợi ý cách sửa lỗi (chỉ gợi ý, tuyệt đối không đưa code giải).' };
-        setChatHistory([userMsg]);
+        const isAccepted = judgeResult?.finalStatus === 'ACCEPTED';
+        const userMsgContent = isAccepted 
+            ? 'Code của tôi đã chạy đúng 100% testcase. Bạn có thể đánh giá độ phức tạp thuật toán và gợi ý cách tối ưu code này cho sạch đẹp và chạy nhanh hơn không?' 
+            : 'Hãy phân tích code của tôi và gợi ý cách sửa lỗi (chỉ gợi ý, tuyệt đối không đưa code giải).';
+
+        const userMsg = { role: 'user', content: userMsgContent };
+        setChatHistory(prev => [...prev, userMsg]);
         setAiLoading(true);
 
         try {
@@ -127,12 +163,14 @@ export default function CodeEditor() {
                 language,
                 errorMessage: typeof runResult === 'string' ? runResult : (judgeResult?.compileError || ''),
                 testCaseResults: judgeResult?.results || [],
-                history: [userMsg]
+                history: [...chatHistory, userMsg]
             };
-            const res = await axios.post(`${BACKEND}/api/ai/chat-with-context`, payload);
-            setChatHistory([userMsg, { role: 'model', content: res.data }]);
+            const res = await axios.post(`${BACKEND}/api/ai/chat-with-context`, payload, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            setChatHistory(prev => [...prev, { role: 'model', content: res.data }]);
         } catch (e) {
-            setChatHistory([userMsg, { role: 'model', content: 'Lỗi: ' + e.message }]);
+            setChatHistory(prev => [...prev, { role: 'model', content: 'Lỗi: ' + e.message }]);
         }
         setAiLoading(false);
     };
@@ -243,26 +281,41 @@ export default function CodeEditor() {
                                 {chatHistory.length === 0 && (
                                     <div className="text-center text-slate-500 mt-10">
                                         <Brain size={48} className="mx-auto mb-4 opacity-30" />
-                                        <p className="mb-6">Bấm nút bên dưới để AI Trợ giúp phân tích đoạn code bạn đang viết và đưa ra gợi ý sửa lỗi (AI sẽ không cung cấp lời giải trực tiếp).</p>
-                                        <button 
-                                            onClick={handleAskAi}
-                                            disabled={aiLoading}
-                                            className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-full transition disabled:opacity-50"
-                                        >
-                                            {aiLoading ? 'Đang phân tích...' : 'Nhận gợi ý từ AI Trợ giúp'}
-                                        </button>
+                                        <p className="mb-6">Bạn chưa có lịch sử trò chuyện. AI có thể gợi ý thuật toán hoặc phân tích lỗi code cho bạn.</p>
+                                        <div className="flex flex-col gap-3">
+                                            <button 
+                                                onClick={handleGetHint}
+                                                disabled={hintLoading}
+                                                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-full transition disabled:opacity-50"
+                                            >
+                                                {hintLoading ? 'Đang tải...' : 'Xem các bước làm bài'}
+                                            </button>
+                                            <button 
+                                                onClick={handleAskAi}
+                                                disabled={aiLoading}
+                                                className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-full transition disabled:opacity-50"
+                                            >
+                                                {aiLoading ? 'Đang phân tích...' : (judgeResult?.finalStatus === 'ACCEPTED' ? 'Nhờ AI đánh giá & Tối ưu code' : 'Phân tích lỗi Code (Debug)')}
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                                 {chatHistory.map((msg, idx) => renderMessage(msg, idx))}
-                                {aiLoading && chatHistory.length > 0 && <div className="text-sm text-slate-500 animate-pulse flex items-center gap-2"><Brain size={16}/> Đang gõ...</div>}
+                                {(aiLoading || hintLoading) && chatHistory.length > 0 && <div className="text-sm text-slate-500 animate-pulse flex items-center gap-2"><Brain size={16}/> Đang gõ...</div>}
                                 
-                                {chatHistory.length > 0 && !aiLoading && (
-                                    <div className="text-center mt-6 pt-4 border-t border-slate-800">
+                                {chatHistory.length > 0 && !aiLoading && !hintLoading && (
+                                    <div className="text-center mt-6 pt-4 border-t border-slate-800 flex flex-col gap-3">
+                                        <button 
+                                            onClick={handleGetHint}
+                                            className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 font-medium rounded-full transition"
+                                        >
+                                            Xem các bước làm bài
+                                        </button>
                                         <button 
                                             onClick={handleAskAi}
                                             className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-purple-400 font-medium rounded-full transition"
                                         >
-                                            Yêu cầu phân tích lại code mới
+                                            {judgeResult?.finalStatus === 'ACCEPTED' ? 'Nhờ AI đánh giá lại code' : 'Yêu cầu phân tích lại code mới'}
                                         </button>
                                     </div>
                                 )}

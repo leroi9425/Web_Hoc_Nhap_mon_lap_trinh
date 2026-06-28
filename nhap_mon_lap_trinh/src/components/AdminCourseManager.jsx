@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { BookOpen, FileText, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import axios from 'axios';
 
+const BACKEND = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
 const AdminCourseManager = () => {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,7 +17,7 @@ const AdminCourseManager = () => {
   const fetchCourses = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('https://datn-java-backend.onrender.com/api/courses');
+      const response = await axios.get(`${BACKEND}/api/courses`);
       setCourses(response.data);
     } catch (err) {
       console.error(err);
@@ -28,7 +30,7 @@ const AdminCourseManager = () => {
     e.stopPropagation();
     if (!window.confirm("CẢNH BÁO: Xóa khóa học sẽ xóa vĩnh viễn tất cả chương, bài học và bài tập bên trong! Bạn có chắc chắn không?")) return;
     try {
-      await axios.delete(`https://datn-java-backend.onrender.com/api/courses/${id}`);
+      await axios.delete(`${BACKEND}/api/courses/${id}`);
       fetchCourses();
     } catch (error) {
       alert("Lỗi khi xóa: " + error.message);

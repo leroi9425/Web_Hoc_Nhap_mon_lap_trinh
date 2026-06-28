@@ -1,16 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Plus, RefreshCw, FileText, CheckSquare, Square, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-const BACKEND = 'https://datn-java-backend.onrender.com';
+const BACKEND = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 const AdminExamManager = () => {
+    const navigate = useNavigate();
     const [exams, setExams] = useState([]);
     const [problems, setProblems] = useState([]);
     const [loading, setLoading] = useState(true);
+    
+    // Modal State
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [modalMode, setModalMode] = useState('create'); // 'create' or 'edit'
     const [saving, setSaving] = useState(false);
     
-    // Form state
+    // Form State
+    const [editingExamId, setEditingExamId] = useState(null);
     const [title, setTitle] = useState('');
     const [durationMinutes, setDurationMinutes] = useState(90);
     const [selectedProblemIds, setSelectedProblemIds] = useState([]);
@@ -36,14 +42,34 @@ const AdminExamManager = () => {
         fetchData();
     }, []);
 
+    const openModal = (mode, exam = null) => {
+        setModalMode(mode);
+        if (mode === 'edit' && exam) {
+            setEditingExamId(exam.id);
+            setTitle(exam.title);
+            setDurationMinutes(exam.durationMinutes);
+            setSelectedProblemIds(exam.problems?.map(p => p.id) || []);
+        } else {
+            setEditingExamId(null);
+            setTitle('');
+            setDurationMinutes(90);
+            setSelectedProblemIds([]);
+        }
+        setSearchTerm('');
+        setIsModalOpen(true);
+    };
+
+    const closeModal = () => {
+        setIsModalOpen(false);
+    };
+
     const handleToggleProblem = (id) => {
         setSelectedProblemIds(prev => 
             prev.includes(id) ? prev.filter(pId => pId !== id) : [...prev, id]
         );
     };
 
-    const handleCreateExam = async (e) => {
-        e.preventDefault();
+    const handleSaveExam = async () => {
         if (!title.trim()) {
             alert("Vui lòng nhập tên đề thi!");
             return;
@@ -55,173 +81,209 @@ const AdminExamManager = () => {
 
         setSaving(true);
         try {
-            await axios.post(`${BACKEND}/api/exams`, {
-                title,
-                durationMinutes,
-                problemIds: selectedProblemIds
-            });
-            alert("✅ Tạo Đề thi thành công!");
-            setTitle('');
-            setDurationMinutes(90);
-            setSelectedProblemIds([]);
+            if (modalMode === 'create') {
+                await axios.post(`${BACKEND}/api/exams`, {
+                    title,
+                    durationMinutes,
+                    problemIds: selectedProblemIds
+                });
+                alert("✅ Tạo Đề thi thành công!");
+            } else {
+                await axios.put(`${BACKEND}/api/exams/${editingExamId}`, {
+                    title,
+                    durationMinutes,
+                    problemIds: selectedProblemIds
+                });
+                alert("✅ Cập nhật Đề thi thành công!");
+            }
+            closeModal();
             fetchData();
         } catch (error) {
-            console.error("Create exam error:", error);
-            alert("❌ Lỗi khi tạo đề thi: " + (error.response?.data || error.message));
+            console.error("Save exam error:", error);
+            alert("❌ Lỗi khi lưu đề thi: " + (error.response?.data || error.message));
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleDeleteExam = async (id) => {
+        if (!window.confirm("Bạn có chắc chắn muốn xóa đề thi này không? Hành động này không thể hoàn tác.")) {
+            return;
+        }
+        try {
+            await axios.delete(`${BACKEND}/api/exams/${id}`);
+            alert("✅ Đã xóa đề thi thành công!");
+            fetchData();
+        } catch (error) {
+            console.error("Delete exam error:", error);
+            alert("❌ Lỗi khi xóa đề thi: " + (error.response?.data || error.message));
         }
     };
 
     const filteredProblems = problems.filter(p => p.title.toLowerCase().includes(searchTerm.toLowerCase()));
 
     return (
-        <div className="p-6 max-w-7xl mx-auto font-sans h-[calc(100vh-4rem)] flex flex-col">
-            <div className="mb-6 shrink-0">
-                <h1 className="text-3xl font-bold text-slate-800 mb-2 flex items-center gap-2">
-                    <FileText className="text-indigo-600" size={32} />
-                    Quản lý Đề Thi (Manual Mode)
-                </h1>
-                <p className="text-slate-500">Tạo đề thi bằng cách chọn các bài tập từ Ngân hàng Câu hỏi.</p>
-            </div>
-
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
-                {/* Khu vực Tạo đề thi */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                    <div className="p-4 bg-indigo-50 border-b border-indigo-100 shrink-0">
-                        <h2 className="font-bold text-indigo-900 flex items-center gap-2">
-                            <Plus size={18} />
-                            Tạo Đề Thi Mới
-                        </h2>
+        <div className="bg-slate-50 min-h-[calc(100vh-4rem)] p-8">
+            <div className="max-w-6xl mx-auto">
+                {/* Header */}
+                <div className="flex justify-between items-center mb-8">
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-800">Quản lý Đề thi</h1>
+                        <p className="text-slate-500 text-sm">Soạn thảo và quản lý ngân hàng đề thi của bạn</p>
                     </div>
-                    <div className="p-5 flex-1 flex flex-col min-h-0">
-                        <div className="space-y-4 shrink-0 mb-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Tên Đề Thi</label>
-                                <input 
-                                    type="text" 
-                                    value={title}
-                                    onChange={e => setTitle(e.target.value)}
-                                    placeholder="VD: Đề thi Giữa kỳ C++"
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Thời gian làm bài (Phút)</label>
-                                <input 
-                                    type="number" 
-                                    value={durationMinutes}
-                                    onChange={e => setDurationMinutes(e.target.value)}
-                                    min="1"
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                                />
-                            </div>
-                        </div>
+                    <button 
+                        onClick={() => openModal('create')} 
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-lg flex items-center gap-2 transition"
+                    >
+                        + Tạo đề thi mới
+                    </button>
+                </div>
 
-                        {/* Danh sách chọn bài */}
-                        <div className="flex-1 flex flex-col border border-slate-200 rounded-lg overflow-hidden min-h-0">
-                            <div className="p-3 bg-slate-50 border-b border-slate-200 shrink-0">
-                                <div className="flex justify-between items-center mb-2">
-                                    <label className="text-sm font-bold text-slate-700">Chọn Bài Tập ({selectedProblemIds.length} đã chọn)</label>
-                                </div>
-                                <input 
-                                    type="text"
-                                    placeholder="Tìm tên bài tập..."
-                                    value={searchTerm}
-                                    onChange={e => setSearchTerm(e.target.value)}
-                                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 outline-none"
-                                />
-                            </div>
-                            <div className="flex-1 overflow-y-auto bg-white p-2 space-y-1">
-                                {loading ? (
-                                    <div className="text-center p-4 text-slate-400 text-sm">Đang tải ngân hàng câu hỏi...</div>
-                                ) : filteredProblems.length === 0 ? (
-                                    <div className="text-center p-4 text-slate-400 text-sm">Không tìm thấy bài tập nào.</div>
-                                ) : (
-                                    filteredProblems.map(prob => {
-                                        const isSelected = selectedProblemIds.includes(prob.id);
-                                        return (
-                                            <div 
-                                                key={prob.id}
-                                                onClick={() => handleToggleProblem(prob.id)}
-                                                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border transition-colors ${
-                                                    isSelected ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-transparent hover:bg-slate-50'
-                                                }`}
+                {/* Bảng danh sách đề thi */}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-100 text-slate-600 font-bold uppercase text-xs">
+                            <tr>
+                                <th className="px-6 py-4">Tên đề thi</th>
+                                <th className="px-6 py-4">Thời gian</th>
+                                <th className="px-6 py-4">Số lượng bài</th>
+                                <th className="px-6 py-4 text-center">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {loading ? (
+                                <tr>
+                                    <td colSpan="4" className="px-6 py-8 text-center text-slate-500">Đang tải dữ liệu...</td>
+                                </tr>
+                            ) : exams.length === 0 ? (
+                                <tr>
+                                    <td colSpan="4" className="px-6 py-8 text-center text-slate-500">Chưa có đề thi nào. Hãy tạo mới!</td>
+                                </tr>
+                            ) : (
+                                exams.map(exam => (
+                                    <tr key={exam.id} className="hover:bg-slate-50">
+                                        <td className="px-6 py-4 font-bold text-slate-800">{exam.title}</td>
+                                        <td className="px-6 py-4">{exam.durationMinutes} phút</td>
+                                        <td className="px-6 py-4">
+                                            <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded text-xs font-bold">
+                                                {exam.problems?.length || 0} bài
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 flex justify-center gap-3">
+                                            <button 
+                                                onClick={() => navigate(`/exams/${exam.id}`)}
+                                                className="text-slate-400 hover:text-blue-600 text-lg transition-colors" 
+                                                title="Xem thử"
                                             >
-                                                <div className={`shrink-0 ${isSelected ? 'text-indigo-600' : 'text-slate-300'}`}>
-                                                    {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className={`text-sm font-medium truncate ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
-                                                        #{prob.id} - {prob.title}
-                                                    </p>
-                                                    <div className="flex gap-2 mt-0.5">
-                                                        <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">{prob.language}</span>
-                                                        <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">{prob.difficulty || 'Dễ'}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })
-                                )}
-                            </div>
-                        </div>
-
-                        <button 
-                            onClick={handleCreateExam}
-                            disabled={saving}
-                            className="mt-4 shrink-0 w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            {saving ? <RefreshCw className="animate-spin" size={18} /> : <Plus size={18} />}
-                            {saving ? 'Đang lưu...' : 'Lưu Đề Thi'}
-                        </button>
-                    </div>
-                </div>
-
-                {/* Danh sách Đề Thi */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
-                        <h2 className="font-bold text-slate-800">Danh sách Đề Thi hiện có</h2>
-                        <button onClick={fetchData} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
-                            <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
-                        </button>
-                    </div>
-                    <div className="flex-1 overflow-auto">
-                        {loading ? (
-                            <div className="p-8 text-center text-slate-400">Đang tải...</div>
-                        ) : exams.length === 0 ? (
-                            <div className="p-12 text-center flex flex-col items-center">
-                                <FileText size={48} className="text-slate-200 mb-3" />
-                                <p className="text-slate-500 font-medium">Chưa có đề thi nào.</p>
-                                <p className="text-sm text-slate-400 mt-1">Hãy tạo đề thi đầu tiên!</p>
-                            </div>
-                        ) : (
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-slate-50 border-b border-slate-200">
-                                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Tên Đề Thi</th>
-                                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Thời Gian</th>
-                                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Số Lượng Bài</th>
+                                                👁️
+                                            </button>
+                                            <button 
+                                                onClick={() => openModal('edit', exam)}
+                                                className="text-slate-400 hover:text-orange-600 text-lg transition-colors"
+                                                title="Sửa"
+                                            >
+                                                ✏️
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteExam(exam.id)}
+                                                className="text-slate-400 hover:text-red-600 text-lg transition-colors"
+                                                title="Xóa"
+                                            >
+                                                🗑️
+                                            </button>
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {exams.map((exam) => (
-                                        <tr key={exam.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-4 py-3 text-sm font-medium text-indigo-600">{exam.title}</td>
-                                            <td className="px-4 py-3 text-sm text-slate-600">{exam.durationMinutes} phút</td>
-                                            <td className="px-4 py-3 text-sm text-slate-600">
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
-                                                    {exam.problems?.length || 0} bài tập
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        )}
-                    </div>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
+
+            {/* Modal Form (Dùng chung cho Tạo & Sửa) */}
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white w-full max-w-2xl rounded-xl shadow-2xl p-6">
+                        <h2 className="text-xl font-bold mb-6">
+                            {modalMode === 'edit' ? 'Chỉnh sửa đề thi' : 'Tạo đề thi mới'}
+                        </h2>
+                        
+                        <div className="grid grid-cols-2 gap-4 mb-6">
+                            <input 
+                                type="text" 
+                                value={title}
+                                onChange={e => setTitle(e.target.value)}
+                                placeholder="Tên đề thi" 
+                                className="col-span-2 p-3 border border-slate-300 rounded-lg outline-none focus:border-blue-500 transition-colors"
+                            />
+                            <input 
+                                type="number" 
+                                value={durationMinutes}
+                                onChange={e => setDurationMinutes(e.target.value)}
+                                placeholder="Thời gian (Phút)" 
+                                className="p-3 border border-slate-300 rounded-lg outline-none focus:border-blue-500 transition-colors"
+                            />
+                            <input 
+                                type="text"
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                placeholder="Tìm tên bài tập..."
+                                className="p-3 border border-slate-300 rounded-lg outline-none focus:border-blue-500 transition-colors"
+                            />
+                        </div>
+
+                        {/* Khu vực chọn bài tập */}
+                        <div className="border border-slate-300 rounded-lg p-2 h-64 overflow-y-auto mb-6 bg-slate-50">
+                            {filteredProblems.length === 0 ? (
+                                <div className="text-center p-4 text-slate-500 text-sm">Không tìm thấy bài tập nào.</div>
+                            ) : (
+                                filteredProblems.map(prob => {
+                                    const isSelected = selectedProblemIds.includes(prob.id);
+                                    return (
+                                        <div 
+                                            key={prob.id}
+                                            onClick={() => handleToggleProblem(prob.id)}
+                                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors mb-1 ${
+                                                isSelected ? 'bg-blue-50 border border-blue-200' : 'bg-white border border-transparent hover:border-slate-200 shadow-sm'
+                                            }`}
+                                        >
+                                            <input 
+                                                type="checkbox" 
+                                                checked={isSelected}
+                                                readOnly
+                                                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <span className={`text-sm font-medium ${isSelected ? 'text-blue-900' : 'text-slate-700'}`}>
+                                                    #{prob.id} - {prob.title}
+                                                </span>
+                                            </div>
+                                            <span className="text-xs px-2 py-1 bg-slate-100 text-slate-500 rounded">{prob.language}</span>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        <div className="flex justify-end gap-3">
+                            <button 
+                                onClick={closeModal} 
+                                disabled={saving}
+                                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                                Hủy
+                            </button>
+                            <button 
+                                onClick={handleSaveExam}
+                                disabled={saving}
+                                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-colors disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {saving ? 'Đang lưu...' : 'Lưu đề thi'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

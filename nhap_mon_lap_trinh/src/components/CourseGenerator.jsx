@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+const BACKEND = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
 const CourseGenerator = () => {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -35,7 +37,7 @@ const CourseGenerator = () => {
       const fileHash = await calculateFileHash(file);
       
       // 2. Check if Hash exists in Database
-      const checkRes = await fetch(`https://datn-java-backend.onrender.com/api/courses/check-hash/${fileHash}`);
+      const checkRes = await fetch(`${BACKEND}/api/courses/check-hash/${fileHash}`);
       if (checkRes.ok) {
           const checkData = await checkRes.json();
           if (checkData.exists) {
@@ -77,7 +79,7 @@ const CourseGenerator = () => {
     setSaveStatus('saving');
     try {
       const finalResult = { ...result, course_name: customCourseName };
-      const response = await fetch('https://datn-java-backend.onrender.com/api/courses/save-generated', {
+      const response = await fetch(`${BACKEND}/api/courses/save-generated`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

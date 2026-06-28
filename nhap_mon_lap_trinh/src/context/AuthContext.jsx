@@ -2,6 +2,8 @@ import { createContext, useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
+const BACKEND = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
@@ -25,7 +27,7 @@ export const AuthProvider = ({ children }) => {
 
     const login = async (googleIdToken, isTestInstructor = false) => {
         try {
-            const response = await axios.post('https://datn-java-backend.onrender.com/api/auth/google', {
+            const response = await axios.post(`${BACKEND}/api/auth/google`, {
                 idToken: googleIdToken,
                 isTestInstructor: isTestInstructor
             });

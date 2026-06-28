@@ -4,6 +4,8 @@ import ReactMarkdown from 'react-markdown';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 
+const BACKEND = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
 const CourseViewer = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -40,7 +42,7 @@ const CourseViewer = () => {
 
   const fetchCourse = async () => {
     try {
-      const response = await fetch(`https://datn-java-backend.onrender.com/api/courses/${id}`);
+      const response = await fetch(`${BACKEND}/api/courses/${id}`);
       if (!response.ok) throw new Error('Lỗi khi tải dữ liệu khóa học');
       const data = await response.json();
       setCourse(data);
@@ -92,7 +94,7 @@ const CourseViewer = () => {
   const fetchSectionProblems = async (sectionId) => {
     setProblemsLoading(true);
     try {
-      const res = await axios.get(`https://datn-java-backend.onrender.com/api/problems/section/${sectionId}`);
+      const res = await axios.get(`${BACKEND}/api/problems/section/${sectionId}`);
       setSectionProblems(res.data);
     } catch (err) {
       console.error("Lỗi lấy bài tập", err);
@@ -104,7 +106,9 @@ const CourseViewer = () => {
   const fetchUserSubmissions = async () => {
     if (!user) return;
     try {
-      const res = await axios.get(`https://datn-java-backend.onrender.com/api/submissions/history`);
+      const res = await axios.get(`${BACKEND}/api/submissions/history`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
       setUserSubmissions(res.data);
     } catch (err) {
       console.error("Lỗi lấy lịch sử", err);
@@ -288,12 +292,12 @@ const CourseViewer = () => {
                         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm mb-4 flex items-center justify-between">
                           <span className="font-bold text-slate-700">Tiến độ bài tập:</span>
                           <span className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full font-bold text-sm">
-                            {sectionProblems.filter(p => userSubmissions.some(s => s.problem.id === p.id && s.status === 'PASSED')).length} / {sectionProblems.length} Hoàn thành
+                            {sectionProblems.filter(p => userSubmissions.some(s => s.problem.id === p.id && s.status === 'ACCEPTED')).length} / {sectionProblems.length} Hoàn thành
                           </span>
                         </div>
 
                         {sectionProblems.map((prob, idx) => {
-                          const isPassed = userSubmissions.some(s => s.problem.id === prob.id && s.status === 'PASSED');
+                          const isPassed = userSubmissions.some(s => s.problem.id === prob.id && s.status === 'ACCEPTED');
                           return (
                             <button 
                               key={prob.id}

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { BookOpen, CheckCircle, FileText, ChevronRight } from 'lucide-react';
 import axios from 'axios';
 
+const BACKEND = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
 const CourseList = () => {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -14,7 +16,7 @@ const CourseList = () => {
 
   const fetchCourses = async () => {
     try {
-      const response = await axios.get('https://datn-java-backend.onrender.com/api/courses');
+      const response = await axios.get(`${BACKEND}/api/courses`);
       setCourses(response.data);
     } catch (err) {
       console.error(err);

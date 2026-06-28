@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-const BACKEND = 'https://datn-java-backend.onrender.com';
+const BACKEND = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 export default function ProblemManager() {
     const navigate = useNavigate();
@@ -20,11 +20,24 @@ export default function ProblemManager() {
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedCourseIds, setExpandedCourseIds] = useState([]);
 
+    // States for Classrooms
+    const [classRooms, setClassRooms] = useState([]);
+    const [loadingClasses, setLoadingClasses] = useState(true);
+    const [selectedClassId, setSelectedClassId] = useState(null);
+
+    // Form specific states for Class assignment
+    const [formClassId, setFormClassId] = useState('');
+    const [formDeadline, setFormDeadline] = useState('');
+
     // --- NEW STATES FOR FLOW ---
     const [viewMode, setViewMode] = useState('list'); // 'list' | 'create'
     const [teacherPrompt, setTeacherPrompt] = useState('');
     const [previewProblem, setPreviewProblem] = useState(null);
     const [isSavingPreview, setIsSavingPreview] = useState(false);
+    
+    // Edit States
+    const [editingProblemId, setEditingProblemId] = useState(null);
+    const [deletedTestCaseIds, setDeletedTestCaseIds] = useState([]);
 
     // States for Right Column (Problem Creation)
     const [creationMode, setCreationMode] = useState('auto'); // 'auto' | 'manual'
@@ -46,7 +59,22 @@ export default function ProblemManager() {
 
     useEffect(() => {
         fetchCourses();
+        fetchClasses();
     }, []);
+
+    const fetchClasses = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${BACKEND}/api/classrooms`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+            setClassRooms(res.data);
+        } catch (error) {
+            console.error("Error fetching classes:", error);
+        } finally {
+            setLoadingClasses(false);
+        }
+    };
 
     const fetchCourses = async () => {
         try {
@@ -92,12 +120,19 @@ export default function ProblemManager() {
         return null;
     }).filter(Boolean);
 
-    const fetchExistingProblems = async (sectionId) => {
+    const fetchExistingProblems = async (sectionId, isClass = false) => {
         setLoadingProblems(true);
         try {
-            const url = sectionId === 'GLOBAL' 
-                ? `${BACKEND}/api/problems` 
-                : `${BACKEND}/api/problems/section/${sectionId}`;
+            let url = '';
+            if (sectionId === 'GLOBAL') {
+                url = `${BACKEND}/api/problems`;
+            } else if (sectionId === 'CLASSES') {
+                url = `${BACKEND}/api/problems/classes`;
+            } else if (isClass) {
+                url = `${BACKEND}/api/problems/class/${sectionId}`;
+            } else {
+                url = `${BACKEND}/api/problems/section/${sectionId}`;
+            }
             const res = await axios.get(url);
             setExistingProblems(res.data);
         } catch (error) {
@@ -111,17 +146,32 @@ export default function ProblemManager() {
     const handleSelectGlobalBank = () => {
         setSelectedCourseId(null);
         setSelectedChapterIndex(null);
+        setSelectedClassId(null);
+        setFormClassId('');
+        setFormDeadline('');
         setSelectedSection({ id: 'GLOBAL', sectionTitle: 'Ngân hàng Bài tập chung', content: '' });
         setViewMode('list');
         setPreviewProblem(null);
         fetchExistingProblems('GLOBAL');
     };
 
+    const handleSelectMyClasses = () => {
+        setSelectedCourseId(null);
+        setSelectedChapterIndex(null);
+        setSelectedClassId(null);
+        setFormClassId('');
+        setFormDeadline('');
+        setSelectedSection({ id: 'CLASSES', sectionTitle: 'Lớp học của tôi', content: '' });
+        setViewMode('list');
+        setPreviewProblem(null);
+        fetchExistingProblems('CLASSES');
+    };
+
     const handleDeleteProblem = async (problemId) => {
         if (!window.confirm("Bạn có chắc chắn muốn xóa bài tập này không? Thao tác này sẽ xóa vĩnh viễn bài tập và các Testcase đi kèm!")) return;
         try {
             await axios.delete(`${BACKEND}/api/problems/${problemId}`);
-            fetchExistingProblems(selectedSection.id); // Tải lại danh sách
+            fetchExistingProblems(selectedSection.id, selectedClassId != null); // Tải lại danh sách
         } catch (error) {
             alert("Lỗi xóa bài tập: " + (error.response?.data?.error || error.message));
         }
@@ -148,10 +198,25 @@ export default function ProblemManager() {
     const handleSelectSection = (courseId, cIndex, sectionData) => {
         setSelectedCourseId(courseId);
         setSelectedChapterIndex(cIndex);
+        setSelectedClassId(null);
+        setFormClassId('');
+        setFormDeadline('');
         setSelectedSection(sectionData);
         setViewMode('list');
         setPreviewProblem(null);
         fetchExistingProblems(sectionData.id);
+    };
+
+    const handleSelectClass = (classData) => {
+        setSelectedCourseId(null);
+        setSelectedChapterIndex(null);
+        setSelectedClassId(classData.id);
+        setFormClassId(classData.id);
+        setFormDeadline('');
+        setSelectedSection({ id: classData.id, sectionTitle: `Bài tập Lớp: ${classData.name}`, content: '' });
+        setViewMode('list');
+        setPreviewProblem(null);
+        fetchExistingProblems(classData.id, true);
     };
 
     // --- AI GENERATION LOGIC ---
@@ -161,36 +226,28 @@ export default function ProblemManager() {
         try {
             const response = await axios.post(`${BACKEND}/api/problems/auto-generate`, {
                 content: selectedSection.content || '',
-                sectionId: selectedSection.id === 'GLOBAL' ? null : selectedSection.id,
+                sectionId: (selectedSection.id === 'GLOBAL' || selectedSection.id === 'CLASSES') ? null : selectedSection.id,
                 teacherPrompt: teacherPrompt
             });
-            setPreviewProblem(response.data);
+            const prob = response.data;
+            setManualTitle(prob.title || '');
+            setManualDesc(prob.description || '');
+            if (prob.testCases && prob.testCases.length > 0) {
+                setManualTestCases(prob.testCases.map(tc => ({
+                    id: null,
+                    input: tc.input || '',
+                    expectedOutput: tc.expectedOutput || '',
+                    isHidden: tc.hidden || false
+                })));
+            } else {
+                setManualTestCases([{ input: '', expectedOutput: '', isHidden: false }]);
+            }
+            setEditingProblemId(null);
+            setCreationMode('manual');
         } catch (err) {
             alert("Lỗi: " + err.message);
         } finally {
             setIsGeneratingProblem(false);
-        }
-    };
-
-    const handleSavePreview = async () => {
-        if (!previewProblem) return;
-        setIsSavingPreview(true);
-        try {
-            const url = selectedSection.id === 'GLOBAL' 
-                ? `${BACKEND}/api/problems` 
-                : `${BACKEND}/api/problems?sectionId=${selectedSection.id}`;
-            const probRes = await axios.post(url, previewProblem);
-            const savedProblem = probRes.data;
-            
-            setGeneratedProblem(savedProblem);
-            setShowModal(true);
-            setPreviewProblem(null);
-            setViewMode('list');
-            fetchExistingProblems(selectedSection.id);
-        } catch (err) {
-            alert("Lỗi: " + err.message);
-        } finally {
-            setIsSavingPreview(false);
         }
     };
 
@@ -200,6 +257,11 @@ export default function ProblemManager() {
     };
 
     const handleRemoveTestCase = (index) => {
+        const tcToRemove = manualTestCases[index];
+        if (tcToRemove.id) {
+            setDeletedTestCaseIds(prev => [...prev, tcToRemove.id]);
+        }
+        
         const newTc = [...manualTestCases];
         newTc.splice(index, 1);
         if (newTc.length === 0) newTc.push({ input: '', expectedOutput: '' });
@@ -226,24 +288,65 @@ export default function ProblemManager() {
 
         setIsSavingManual(true);
         try {
-            // 1. Create Problem with sectionId
-            const url = selectedSection.id === 'GLOBAL' 
-                ? `${BACKEND}/api/problems` 
-                : `${BACKEND}/api/problems?sectionId=${selectedSection.id}`;
-            const probRes = await axios.post(url, {
-                title: manualTitle,
-                description: manualDesc,
-                difficulty: "Dễ" // Default
-            });
-            const savedProblem = probRes.data;
+            let savedProblem;
 
-            // 2. Add Test Cases
-            for (const tc of validTestCases) {
-                await axios.post(`${BACKEND}/api/problems/${savedProblem.id}/testcases`, {
-                    input: tc.input,
-                    expectedOutput: tc.expectedOutput,
-                    isHidden: false
+            if (editingProblemId) {
+                // UPDATE EXISTING PROBLEM
+                const probRes = await axios.put(`${BACKEND}/api/problems/${editingProblemId}`, {
+                    title: manualTitle,
+                    description: manualDesc,
+                    difficulty: "Dễ"
                 });
+                savedProblem = probRes.data;
+
+                // Delete removed testcases
+                for (const tcId of deletedTestCaseIds) {
+                    await axios.delete(`${BACKEND}/api/problems/${editingProblemId}/testcases/${tcId}`);
+                }
+
+                // Update or Add testcases
+                for (const tc of validTestCases) {
+                    if (tc.id) {
+                        await axios.put(`${BACKEND}/api/problems/${editingProblemId}/testcases/${tc.id}`, {
+                            input: tc.input,
+                            expectedOutput: tc.expectedOutput,
+                            hidden: tc.isHidden || false
+                        });
+                    } else {
+                        await axios.post(`${BACKEND}/api/problems/${editingProblemId}/testcases`, {
+                            input: tc.input,
+                            expectedOutput: tc.expectedOutput,
+                            hidden: tc.isHidden || false
+                        });
+                    }
+                }
+            } else {
+                // 1. Create Problem with sectionId or classId
+                let url = `${BACKEND}/api/problems?`;
+                const params = new URLSearchParams();
+                if (selectedSection.id !== 'GLOBAL' && selectedSection.id !== 'CLASSES') {
+                    params.append('sectionId', selectedSection.id);
+                }
+                if (formClassId) {
+                    params.append('classId', formClassId);
+                    if (formDeadline) params.append('deadline', formDeadline);
+                }
+                url += params.toString();
+                const probRes = await axios.post(url, {
+                    title: manualTitle,
+                    description: manualDesc,
+                    difficulty: "Dễ" // Default
+                });
+                savedProblem = probRes.data;
+
+                // 2. Add Test Cases
+                for (const tc of validTestCases) {
+                    await axios.post(`${BACKEND}/api/problems/${savedProblem.id}/testcases`, {
+                        input: tc.input,
+                        expectedOutput: tc.expectedOutput,
+                        hidden: tc.isHidden || false
+                    });
+                }
             }
 
             setGeneratedProblem(savedProblem);
@@ -253,13 +356,52 @@ export default function ProblemManager() {
             setManualTitle('');
             setManualDesc('');
             setManualTestCases([{ input: '', expectedOutput: '' }]);
-            fetchExistingProblems(selectedSection.id);
+            setEditingProblemId(null);
+            setDeletedTestCaseIds([]);
+            fetchExistingProblems(selectedSection.id, selectedClassId != null);
             
         } catch (err) {
             alert("Lỗi: " + err.message);
         } finally {
             setIsSavingManual(false);
         }
+    };
+
+    const handleEditClick = async (prob) => {
+        try {
+            const res = await axios.get(`${BACKEND}/api/problems/${prob.id}/all-testcases`);
+            const testcases = res.data;
+            
+            setManualTitle(prob.title || '');
+            setManualDesc(prob.description || '');
+            
+            if (testcases && testcases.length > 0) {
+                setManualTestCases(testcases.map(tc => ({
+                    id: tc.id,
+                    input: tc.input || '',
+                    expectedOutput: tc.expectedOutput || '',
+                    isHidden: tc.hidden || false
+                })));
+            } else {
+                setManualTestCases([{ input: '', expectedOutput: '', isHidden: false }]);
+            }
+            
+            setEditingProblemId(prob.id);
+            setDeletedTestCaseIds([]);
+            setViewMode('create');
+            setCreationMode('manual');
+        } catch (e) {
+            alert("Lỗi khi tải chi tiết bài tập: " + e.message);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setManualTitle('');
+        setManualDesc('');
+        setManualTestCases([{ input: '', expectedOutput: '', isHidden: false }]);
+        setEditingProblemId(null);
+        setDeletedTestCaseIds([]);
+        setViewMode('list');
     };
 
     return (
@@ -292,6 +434,17 @@ export default function ProblemManager() {
                     </div>
                     
                     <div className="flex-1 overflow-y-auto p-2">
+                        <button 
+                            onClick={handleSelectMyClasses}
+                            className={`w-full text-left px-4 py-3 mb-2 font-bold text-sm rounded-lg flex items-center gap-2 transition-colors ${
+                                selectedSection?.id === 'CLASSES' 
+                                ? 'bg-blue-600 text-white shadow-md' 
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            }`}
+                        >
+                            <span>🏫</span> Lớp học của tôi
+                        </button>
+                        
                         <button 
                             onClick={handleSelectGlobalBank}
                             className={`w-full text-left px-4 py-3 mb-4 font-bold text-sm rounded-lg flex items-center gap-2 transition-colors ${
@@ -364,6 +517,8 @@ export default function ProblemManager() {
                                 )})}
                             </div>
                         )}
+
+
                     </div>
                 </aside>
 
@@ -389,16 +544,19 @@ export default function ProblemManager() {
                             {/* CÔNG XƯỞNG SẢN XUẤT */}
                             {viewMode === 'create' && !previewProblem && (
                             <div className="space-y-4">
-                                <button onClick={() => setViewMode('list')} className="text-blue-600 hover:text-blue-800 font-bold text-sm flex items-center gap-1 transition-colors">
+                                <button onClick={handleCancelEdit} className="text-blue-600 hover:text-blue-800 font-bold text-sm flex items-center gap-1 transition-colors">
                                     ← Quay lại danh sách bài tập
                                 </button>
                                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                                 <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
                                     <div className="flex items-center gap-2">
-                                        <span className="text-2xl">✨</span>
-                                        <h3 className="text-lg font-bold text-slate-800">Biên soạn Bài Tập Mới</h3>
+                                        <span className="text-2xl">{editingProblemId ? '✏️' : '✨'}</span>
+                                        <h3 className="text-lg font-bold text-slate-800">
+                                            {editingProblemId ? 'Chỉnh sửa Bài Tập' : 'Biên soạn Bài Tập Mới'}
+                                        </h3>
                                     </div>
-                                    {/* Toggle Switch */}
+                                    {/* Toggle Switch - Ẩn khi đang Edit */}
+                                    {!editingProblemId && (
                                     <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
                                         <button 
                                             onClick={() => setCreationMode('auto')} 
@@ -413,6 +571,7 @@ export default function ProblemManager() {
                                             ✍️ Nhập Thủ Công
                                         </button>
                                     </div>
+                                    )}
                                 </div>
 
                                 {/* AUTO MODE */}
@@ -429,6 +588,33 @@ export default function ProblemManager() {
                                             rows={3}
                                             className="w-full max-w-md px-4 py-3 mb-6 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:ring-2 focus:ring-blue-500 outline-none resize-y placeholder-slate-500" 
                                         />
+                                        {selectedSection?.id === 'CLASSES' && (
+                                            <>
+                                                <div className="w-full max-w-md mb-4 text-left">
+                                                    <label className="block text-sm font-bold text-slate-300 mb-1.5">Giao cho Lớp học (Tùy chọn)</label>
+                                                    <select 
+                                                        value={formClassId}
+                                                        onChange={e => setFormClassId(e.target.value)}
+                                                        className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                    >
+                                                        <option value="">-- Không giao cho lớp nào --</option>
+                                                        {classRooms.map(cls => (
+                                                            <option key={cls.id} value={cls.id}>{cls.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="w-full max-w-md mb-6 text-left">
+                                                    <label className={`block text-sm font-bold mb-1.5 ${formClassId ? 'text-slate-300' : 'text-slate-600'}`}>Hạn nộp (Deadline) cho lớp học</label>
+                                                    <input 
+                                                        type="datetime-local" 
+                                                        value={formDeadline}
+                                                        onChange={e => setFormDeadline(e.target.value)}
+                                                        disabled={!formClassId}
+                                                        className={`w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:ring-2 focus:ring-blue-500 outline-none ${!formClassId && 'opacity-50 cursor-not-allowed'}`} 
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
                                         <button 
                                             onClick={handleGenerateProblem} 
                                             disabled={isGeneratingProblem} 
@@ -463,6 +649,33 @@ export default function ProblemManager() {
                                                     className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y bg-white font-mono" 
                                                 />
                                             </div>
+                                            {selectedSection?.id === 'CLASSES' && (
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-slate-700 mb-1.5">Giao cho Lớp học (Tùy chọn)</label>
+                                                        <select 
+                                                            value={formClassId}
+                                                            onChange={e => setFormClassId(e.target.value)}
+                                                            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                                                        >
+                                                            <option value="">-- Không giao cho lớp nào --</option>
+                                                            {classRooms.map(cls => (
+                                                                <option key={cls.id} value={cls.id}>{cls.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className={`block text-sm font-bold mb-1.5 ${formClassId ? 'text-slate-700' : 'text-slate-400'}`}>Hạn nộp (Deadline) cho lớp học</label>
+                                                        <input 
+                                                            type="datetime-local" 
+                                                            value={formDeadline}
+                                                            onChange={e => setFormDeadline(e.target.value)}
+                                                            disabled={!formClassId}
+                                                            className={`w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white ${!formClassId && 'opacity-50 cursor-not-allowed bg-slate-100'}`} 
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
                                             
                                             <div className="pt-4 border-t border-slate-200">
                                                 <div className="flex justify-between items-center mb-4">
@@ -520,54 +733,6 @@ export default function ProblemManager() {
                             </div>
                             )}
 
-                            {viewMode === 'create' && previewProblem && (
-                                <div className="space-y-4">
-                                    <button onClick={() => setPreviewProblem(null)} className="text-slate-500 hover:text-slate-700 font-bold text-sm flex items-center gap-1 transition-colors">
-                                        ← Hủy bản nháp, tạo bài khác
-                                    </button>
-                                    
-                                    <div className="bg-white p-8 rounded-xl shadow-lg border border-blue-200 relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-bl-lg">PREVIEW MODE</div>
-                                        
-                                        <h2 className="text-2xl font-extrabold text-slate-800 mb-2">{previewProblem.title}</h2>
-                                        <div className="prose prose-sm max-w-none mb-6 p-4 bg-slate-50 rounded-lg border border-slate-100 whitespace-pre-wrap">
-                                            {previewProblem.description}
-                                        </div>
-                                        
-                                        {previewProblem.referenceCode && (
-                                            <div className="mb-6">
-                                                <h4 className="text-sm font-bold text-slate-700 mb-2">Code tham khảo (C++)</h4>
-                                                <pre className="bg-slate-900 text-green-400 p-4 rounded-lg overflow-x-auto text-xs font-mono">
-                                                    <code>{previewProblem.referenceCode}</code>
-                                                </pre>
-                                            </div>
-                                        )}
-                                        
-                                        <div className="mb-8">
-                                            <h4 className="text-sm font-bold text-slate-700 mb-3">Test Cases sinh tự động ({previewProblem.testCases?.length || 0})</h4>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                {previewProblem.testCases?.map((tc, idx) => (
-                                                    <div key={idx} className="bg-slate-50 p-3 rounded border border-slate-200 text-xs font-mono">
-                                                        <div className="font-bold text-slate-500 mb-1">Input:</div>
-                                                        <div className="mb-2 whitespace-pre-wrap">{tc.input}</div>
-                                                        <div className="font-bold text-slate-500 mb-1">Output:</div>
-                                                        <div className="text-blue-600 whitespace-pre-wrap">{tc.expectedOutput}</div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        
-                                        <button 
-                                            onClick={handleSavePreview}
-                                            disabled={isSavingPreview}
-                                            className={`w-full py-4 font-bold rounded-xl shadow-xl transition-all text-lg flex justify-center items-center gap-2 ${isSavingPreview ? 'bg-slate-400 text-white cursor-not-allowed' : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white hover:scale-[1.02]'}`}
-                                        >
-                                            {isSavingPreview ? '⏳ Đang lưu...' : '💾 Chốt! Lưu bài tập này vào CSDL'}
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
                             {viewMode === 'list' && (
                             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                                 {/* HEADER: Tên & Các nút hành động */}
@@ -577,13 +742,13 @@ export default function ProblemManager() {
                                     </h3>
                                     <div className="flex gap-3">
                                         <button 
-                                            onClick={() => { setViewMode('create'); setCreationMode('auto'); }} 
+                                            onClick={() => { setViewMode('create'); setCreationMode('auto'); setEditingProblemId(null); setManualTitle(''); setManualDesc(''); setManualTestCases([{input: '', expectedOutput: ''}]); setFormClassId(selectedClassId || ''); setFormDeadline(''); }} 
                                             className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded shadow-md transition flex items-center gap-2"
                                         >
                                             <span className="text-lg">✨</span> Sinh đề bằng AI
                                         </button>
                                         <button 
-                                            onClick={() => { setViewMode('create'); setCreationMode('manual'); }} 
+                                            onClick={() => { setViewMode('create'); setCreationMode('manual'); setEditingProblemId(null); setManualTitle(''); setManualDesc(''); setManualTestCases([{input: '', expectedOutput: ''}]); setFormClassId(selectedClassId || ''); setFormDeadline(''); }} 
                                             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded shadow-md transition flex items-center gap-2"
                                         >
                                             <span className="text-lg">+</span> Thêm thủ công
@@ -624,11 +789,18 @@ export default function ProblemManager() {
                                                         <td className="p-4">
                                                             <div className="flex justify-center gap-3">
                                                                 <button 
-                                                                    onClick={() => navigate(`/problem/${prob.id}`)} 
-                                                                    className="text-blue-500 hover:text-blue-700 transition"
-                                                                    title="Chỉnh sửa / Xem thử"
+                                                                    onClick={() => handleEditClick(prob)} 
+                                                                    className="text-emerald-500 hover:text-emerald-700 transition"
+                                                                    title="Chỉnh sửa bài tập"
                                                                 >
                                                                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => navigate(`/problems/${prob.id}`)} 
+                                                                    className="text-blue-500 hover:text-blue-700 transition"
+                                                                    title="Xem thử giao diện sinh viên"
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                                                 </button>
                                                                 <button 
                                                                     onClick={() => handleDeleteProblem(prob.id)} 
@@ -669,7 +841,7 @@ export default function ProblemManager() {
                             <button onClick={() => setShowModal(false)} className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors">
                                 Đóng
                             </button>
-                            <button onClick={() => navigate(`/problem/${generatedProblem?.id}`)} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-colors flex items-center gap-2">
+                            <button onClick={() => navigate(`/problems/${generatedProblem?.id}`)} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-colors flex items-center gap-2">
                                 💻 Test thử bài này
                             </button>
                         </div>

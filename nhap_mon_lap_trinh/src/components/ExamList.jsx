@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, Clock, PlayCircle, CheckCircle, RefreshCcw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-const BACKEND = 'https://datn-java-backend.onrender.com';
+const BACKEND = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 const ExamList = () => {
     const [exams, setExams] = useState([]);

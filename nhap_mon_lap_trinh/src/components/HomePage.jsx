@@ -1,9 +1,23 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { Sparkles, ChevronRight, Code, Brain, Target } from 'lucide-react';
 
 const HomePage = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const handleStart = () => {
+    if (user) {
+      if (user.role === 'INSTRUCTOR' || user.role === 'ADMIN') {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/learn');
+      }
+    } else {
+      navigate('/register');
+    }
+  };
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-950 text-white flex flex-col items-center justify-center text-center p-6">
@@ -18,11 +32,8 @@ const HomePage = () => {
         Hệ thống đánh giá mã nguồn tự động, tài liệu trực quan và lộ trình học tập cá nhân hóa. Bắt đầu hành trình trở thành chuyên gia phần mềm ngay hôm nay.
       </p>
       <div className="flex gap-4">
-        <button onClick={() => navigate('/register')} className="bg-emerald-600 hover:bg-emerald-500 px-8 py-4 rounded-lg font-bold text-lg transition flex items-center gap-2">
-          Bắt đầu miễn phí <ChevronRight size={20} />
-        </button>
-        <button onClick={() => navigate('/problems')} className="bg-slate-800 hover:bg-slate-700 px-8 py-4 rounded-lg font-bold text-lg transition border border-slate-700">
-          Xem danh sách bài tập
+        <button onClick={handleStart} className="bg-emerald-600 hover:bg-emerald-500 px-8 py-4 rounded-lg font-bold text-lg transition flex items-center gap-2">
+          {user ? 'Bắt đầu' : 'Bắt đầu miễn phí'} <ChevronRight size={20} />
         </button>
       </div>
 
