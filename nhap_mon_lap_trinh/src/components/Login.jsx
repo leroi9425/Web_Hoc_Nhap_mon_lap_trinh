@@ -7,10 +7,8 @@ import { useNavigate } from 'react-router-dom';
 export default function Login({ isRegister = false }) {
     const { login } = useAuth();
     const navigate = useNavigate();
-    const [isTestInstructor, setIsTestInstructor] = useState(false);
-
     const handleGoogleSuccess = (credentialResponse) => {
-        login(credentialResponse.credential, isTestInstructor);
+        login(credentialResponse.credential);
     };
 
     const handleGoogleError = () => {
@@ -35,19 +33,6 @@ export default function Login({ isRegister = false }) {
                         shape="pill"
                         text={isRegister ? "signup_with" : "signin_with"}
                     />
-                </div>
-
-                <div className="pt-2">
-                    <label className="block text-sm font-medium text-slate-400 mb-3">Tùy chọn đăng nhập test</label>
-                    <label className="flex items-center gap-3 text-white cursor-pointer bg-slate-800 p-3 rounded-md border border-slate-700 hover:border-slate-600 transition">
-                        <input 
-                            type="checkbox" 
-                            checked={isTestInstructor}
-                            onChange={(e) => setIsTestInstructor(e.target.checked)}
-                            className="w-4 h-4 text-purple-500 focus:ring-purple-500 rounded bg-slate-900 border-slate-600" 
-                        /> 
-                        <span className="font-medium text-purple-400">Đăng nhập dưới tư cách Giảng Viên</span>
-                    </label>
                 </div>
 
                 <div className="mt-8 text-center text-slate-400 text-sm border-t border-slate-800 pt-6">
