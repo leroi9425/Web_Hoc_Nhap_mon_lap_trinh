@@ -420,26 +420,54 @@ const TeacherClassRoom = () => {
                         
                         <div className="mb-6 flex-shrink-0 relative">
                             <label className="block text-sm font-semibold text-slate-700 mb-2">Tìm và thêm sinh viên</label>
-                            <input 
-                                type="text" 
-                                value={manageSearchQuery}
-                                onChange={e => setManageSearchQuery(e.target.value)}
-                                placeholder="Gõ email để tìm kiếm..." 
-                                className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-mono" 
-                            />
-                            {manageSuggestions.length > 0 && (
-                                <ul className="absolute z-50 w-full bg-white border border-slate-200 mt-1 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                                    {manageSuggestions.map(u => (
-                                        <li 
-                                            key={u.id} 
-                                            onClick={() => addEmailToManageClass(u.email)}
-                                            className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm text-slate-700 font-mono border-b border-slate-50 last:border-0"
-                                        >
-                                            {u.email}
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <input 
+                                        type="text" 
+                                        value={manageSearchQuery}
+                                        onChange={e => setManageSearchQuery(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                if (manageSearchQuery.trim()) {
+                                                    addEmailToManageClass(manageSearchQuery.trim());
+                                                    setManageSearchQuery('');
+                                                }
+                                            }
+                                        }}
+                                        placeholder="Gõ email để tìm kiếm..." 
+                                        className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-mono" 
+                                    />
+                                    {manageSuggestions.length > 0 && (
+                                        <ul className="absolute z-50 w-full bg-white border border-slate-200 mt-1 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                                            {manageSuggestions.map(u => (
+                                                <li 
+                                                    key={u.id} 
+                                                    onClick={() => {
+                                                        addEmailToManageClass(u.email);
+                                                        setManageSearchQuery('');
+                                                    }}
+                                                    className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm text-slate-700 font-mono border-b border-slate-50 last:border-0"
+                                                >
+                                                    {u.email}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                                <button 
+                                    type="button"
+                                    onClick={() => {
+                                        if (manageSearchQuery.trim()) {
+                                            addEmailToManageClass(manageSearchQuery.trim());
+                                            setManageSearchQuery('');
+                                        }
+                                    }}
+                                    className="px-4 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0"
+                                >
+                                    Thêm
+                                </button>
+                            </div>
                         </div>
 
                         <div className="flex-1 overflow-y-auto pr-2 min-h-[200px]">
