@@ -65,23 +65,6 @@ const InstructorDashboard = () => {
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
-            {/* HEADER */}
-            <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center shadow-sm shrink-0">
-                <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">CE</div>
-                    <h1 className="text-xl font-bold text-slate-800">Giảng Viên</h1>
-                </div>
-                
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-3 cursor-pointer group" onClick={handleLogout} title="Nhấn để đăng xuất">
-                        <span className="text-sm font-semibold text-slate-700 group-hover:text-blue-600 transition-colors">{user?.username || 'Giảng viên'}</span>
-                        <div className="w-10 h-10 rounded-full border-2 border-blue-500 overflow-hidden shadow-sm group-hover:shadow-md transition-shadow">
-                            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.username || 'abc'}`} alt="Avatar" />
-                        </div>
-                    </div>
-                </div>
-            </header>
-
             {/* MAIN CONTENT */}
             <main className="flex-1 flex flex-col p-8 lg:p-12 max-w-7xl mx-auto w-full gap-8">
                 
